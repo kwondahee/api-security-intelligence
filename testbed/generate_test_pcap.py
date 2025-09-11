@@ -28,6 +28,6 @@ get_status = Ether()/IP(src="10.0.0.8", dst="10.0.0.10")/TCP(sport=12348, dport=
 packets.append(get_status)
 
 # Write packets to a .pcap file
-wrpcap("simulated_api.pcap", packets)
+wrpcap("test.pcap", packets)
 
 print("Generated simulated_api.pcap with 4 API calls!")
