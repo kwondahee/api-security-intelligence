@@ -18,15 +18,16 @@ import json
 import time
 import threading
 import asyncio
-import aiohttp
+import aiohttp # Kept for future async expansion, but currently unused
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from enum import Enum
 import logging
 import statistics
 import random
+from urllib.parse import urljoin
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -41,7 +42,7 @@ class Severity(Enum):
 
 @dataclass
 class SecurityFinding:
-    """Represents a security vulnerability finding"""
+    """Represents a security vulnerability finding (Internal to RateAgent)"""
     vulnerability_type: str
     severity: Severity
     endpoint: str
@@ -50,10 +51,24 @@ class SecurityFinding:
     remediation: str
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
 
+# Dataclass mirroring the Orchestrator's standardized finding format
+@dataclass
+class RateFinding:
+    agent: str
+    category: str
+    vuln: str
+    status: str
+    severity: str
+    endpoint: str
+    method: str
+    actor: str
+    evidence: Dict[str, Any]
+    recommendation: str
+
 @dataclass
 class APIEndpoint:
     """Represents an API endpoint to be tested"""
-    url: str
+    url: str # Full URL
     method: str
     headers: Dict[str, str] = field(default_factory=dict)
     parameters: Dict[str, Any] = field(default_factory=dict)
@@ -79,11 +94,12 @@ class RateAgent:
     Rate Limiting Security Agent for API vulnerability assessment
     """
     
-    def __init__(self, target_base_url: str, timeout: int = 30, max_workers: int = 50):
+    def __init__(self, target_base_url: str, timeout: int = 30, max_workers: int = 50, name: str = "RateAgent"):
+        self.name = name
         self.base_url = target_base_url.rstrip('/')
         self.timeout = timeout
         self.max_workers = max_workers
-        self.findings: List[SecurityFinding] = []
+        self.internal_findings: List[SecurityFinding] = [] # Stores internal SecurityFinding objects
         self.session = requests.Session()
         
         # Rate limiting test configurations
@@ -104,13 +120,97 @@ class RateAgent:
         
         logger.info(f"RateAgent initialized for target: {self.base_url}")
 
+    def run_scan(self, endpoint_path: str, method: str) -> List[Dict[str, Any]]:
+        """
+        Wrapper method called by the orchestrator to initiate the rate limiting scan.
+        It calls the main analysis method and formats the results for the orchestrator.
+        
+        FIX: Removed asyncio.run() and now calls analyze_endpoint synchronously.
+        """
+        self.internal_findings = [] 
+        
+        # 1. Prepare the endpoint object
+        endpoint = APIEndpoint(
+            url=f"{self.base_url}{endpoint_path}", 
+            method=method,
+            headers={"Content-Type": "application/json"}
+        )
+        
+        # 2. Call the main analysis method synchronously
+        try:
+            findings = self.analyze_endpoint(endpoint)
+            self.internal_findings.extend(findings) # Store findings
+        except Exception as e:
+            logger.error(f"RateAgent failed to run analysis: {e}")
+        
+        # 3. Transform dataclass findings into the orchestrator's expected dictionary format
+        orchestrator_findings = []
+        for finding in self.internal_findings:
+            orchestrator_findings.append(self._convert_to_dict_finding(finding))
+            
+        logger.info(f"RateAgent finished scan on {endpoint_path}. Found {len(orchestrator_findings)} potential issues.")
+        return orchestrator_findings
+
+    # --- REPORTING HELPER ---
+    def _convert_to_dict_finding(self, finding: SecurityFinding) -> Dict[str, Any]:
+        """Converts internal SecurityFinding to the standardized orchestrator dictionary format."""
+        
+        # Map RateAgent internal severity/status to common orchestrator values
+        status = "VULNERABLE"
+        if "NO_RATE_LIMITING" in finding.vulnerability_type or "NO_RATE_LIMIT_HEADERS" in finding.vulnerability_type:
+             status = "MISCONFIGURATION"
+        
+        # Use a more descriptive vulnerability type for the final report
+        vuln_map = {
+            "NO_RATE_LIMITING": "Missing Rate Limiting Mechanism",
+            "WEAK_RATE_LIMITING": "Insufficient Rate Limiting",
+            "USER_AGENT_RATE_BYPASS": "Rate Limit Bypass (User-Agent)",
+            "IP_SPOOFING_RATE_BYPASS": "Rate Limit Bypass (IP Spoofing Header)",
+            "HEADER_MANIPULATION_BYPASS": "Rate Limit Bypass (Custom Header)",
+            "CASE_SENSITIVITY_BYPASS": "Rate Limit Bypass (URL Case Sensitivity)",
+            "HTTP_METHOD_BYPASS": "Rate Limit Bypass (HTTP Method)",
+            "POOR_BURST_PROTECTION": "Poor Burst Traffic Protection",
+            "SERVER_ERRORS_UNDER_LOAD": "Resource Exhaustion (Server Errors)",
+            "POOR_CONCURRENT_HANDLING": "Poor Concurrent Request Handling",
+            "LARGE_PAYLOAD_DOS": "Denial of Service (Large Payload)",
+            "COMPLEX_PARAMETER_DOS": "Denial of Service (Complex Parameter)",
+            "PERFORMANCE_DEGRADATION": "Resource Exhaustion (Performance Degradation)",
+            "POTENTIAL_MEMORY_LEAK": "Resource Exhaustion (Potential Memory Leak)",
+            "NO_RATE_LIMIT_HEADERS": "Missing Rate Limit Headers",
+            "EXCESSIVE_RATE_LIMIT": "Excessive Rate Limit Configuration",
+            "OVERLY_RESTRICTIVE_RATE_LIMIT": "Overly Restrictive Rate Limit Configuration",
+            "POOR_DDOS_PROTECTION_SLOWLORIS": "Poor DDoS Protection (SlowLoris)",
+            "POOR_DDOS_PROTECTION_HIGH_FREQUENCY": "Poor DDoS Protection (High Frequency)",
+            "POOR_DDOS_PROTECTION_CONNECTION_FLOOD": "Poor DDoS Protection (Connection Flood)",
+            "RESPONSE_TIME_DEGRADATION": "Performance Degradation under Load",
+            "INCONSISTENT_RESPONSE_TIMES": "Inconsistent Response Times under Load",
+            "LARGE_PAYLOAD_SERVER_ERROR": "Denial of Service (Large Payload Server Error)",
+            "ANALYSIS_ERROR": "Rate Limiting Analysis Error"
+        }
+
+        return asdict(RateFinding(
+            agent=self.name,
+            category="Rate Limiting",
+            vuln=vuln_map.get(finding.vulnerability_type, finding.vulnerability_type),
+            status=status,
+            severity=finding.severity.value,
+            endpoint=finding.endpoint.replace(self.base_url, ''), # Clean up endpoint URL
+            method=finding.endpoint.split(" ")[0] if " " in finding.endpoint else "",
+            actor="traffic_fuzzer",
+            evidence=finding.evidence,
+            recommendation=finding.remediation
+        ))
+
+    # --- MAIN ANALYSIS METHOD (NOW SYNCHRONOUS) ---
     def analyze_endpoint(self, endpoint: APIEndpoint) -> List[SecurityFinding]:
         """
-        Main analysis method for an API endpoint
+        Main analysis method for an API endpoint (Now Synchronous)
         """
         findings = []
         
         try:
+            # All calls are now synchronous, without session argument
+            
             # Test 1: Basic rate limiting detection
             findings.extend(self._test_basic_rate_limiting(endpoint))
             
@@ -142,9 +242,42 @@ class RateAgent:
                 evidence={"error": str(e)},
                 remediation="Check endpoint accessibility and network connectivity"
             ))
-        
-        self.findings.extend(findings)
+            
         return findings
+
+    # --- HELPER METHODS ---
+    
+    # Helper method for alternating case (for _test_case_sensitivity_bypass)
+    def _alternate_case(self, url: str) -> str:
+        """Create alternating case version of URL"""
+        result = ""
+        upper = True
+        for char in url:
+            if char.isalpha():
+                result += char.upper() if upper else char.lower()
+                upper = not upper
+            else:
+                result += char
+        return result
+
+    def _make_request(self, endpoint: APIEndpoint) -> Optional[requests.Response]:
+        """Make a single HTTP request to the endpoint"""
+        try:
+            response = self.session.request(
+                method=endpoint.method,
+                url=endpoint.url,
+                headers=endpoint.headers,
+                params=endpoint.parameters,
+                json=endpoint.body,
+                timeout=self.timeout
+            )
+            return response
+        
+        except requests.exceptions.RequestException as e:
+            logger.debug(f"Request to {endpoint.url} failed: {str(e)}")
+            return None
+    
+    # --- TEST METHODS (FIXED: All below methods are now SYNCHRONOUS and only take 'endpoint') ---
 
     def _test_basic_rate_limiting(self, endpoint: APIEndpoint) -> List[SecurityFinding]:
         """Test for basic rate limiting implementation"""
@@ -214,7 +347,7 @@ class RateAgent:
         return findings
 
     def _test_rate_limit_bypass(self, endpoint: APIEndpoint) -> List[SecurityFinding]:
-        """Test various rate limit bypass techniques"""
+        """Test various rate limit bypass techniques (FIXED: Removed async and session)"""
         findings = []
         
         # Test different bypass techniques
@@ -228,7 +361,8 @@ class RateAgent:
         
         for technique in bypass_techniques:
             try:
-                technique_findings = technique(endpoint)
+                # FIX: Call synchronous technique without session or await
+                technique_findings = technique(endpoint) 
                 findings.extend(technique_findings)
             except Exception as e:
                 logger.warning(f"Bypass technique failed: {str(e)}")
@@ -236,7 +370,7 @@ class RateAgent:
         return findings
 
     def _test_user_agent_bypass(self, endpoint: APIEndpoint) -> List[SecurityFinding]:
-        """Test if changing User-Agent header bypasses rate limits"""
+        """Test if changing User-Agent header bypasses rate limits (FIXED: Removed async and session)"""
         findings = []
         
         user_agents = [
@@ -290,7 +424,7 @@ class RateAgent:
         return findings
 
     def _test_ip_spoofing_bypass(self, endpoint: APIEndpoint) -> List[SecurityFinding]:
-        """Test if IP spoofing headers bypass rate limits"""
+        """Test if IP spoofing headers bypass rate limits (FIXED: Removed async and session)"""
         findings = []
         
         spoofing_headers = [
@@ -337,7 +471,7 @@ class RateAgent:
         return findings
 
     def _test_header_manipulation_bypass(self, endpoint: APIEndpoint) -> List[SecurityFinding]:
-        """Test header manipulation for rate limit bypass"""
+        """Test header manipulation for rate limit bypass (FIXED: Removed async and session)"""
         findings = []
         
         manipulation_techniques = [
@@ -383,7 +517,7 @@ class RateAgent:
         return findings
 
     def _test_case_sensitivity_bypass(self, endpoint: APIEndpoint) -> List[SecurityFinding]:
-        """Test case sensitivity in endpoint URLs for rate limit bypass"""
+        """Test case sensitivity in endpoint URLs for rate limit bypass (FIXED: Removed async and session)"""
         findings = []
         
         if not endpoint.url:
@@ -433,7 +567,7 @@ class RateAgent:
         return findings
 
     def _test_http_method_bypass(self, endpoint: APIEndpoint) -> List[SecurityFinding]:
-        """Test if different HTTP methods bypass rate limits"""
+        """Test if different HTTP methods bypass rate limits (FIXED: Removed async and session)"""
         findings = []
         
         alternative_methods = ['HEAD', 'OPTIONS', 'PATCH']
@@ -481,7 +615,7 @@ class RateAgent:
         return findings
 
     def _test_burst_traffic(self, endpoint: APIEndpoint) -> List[SecurityFinding]:
-        """Test handling of burst traffic patterns"""
+        """Test handling of burst traffic patterns (FIXED: Removed async and session)"""
         findings = []
         
         # Burst test: many requests in short time
@@ -532,7 +666,7 @@ class RateAgent:
         return findings
 
     def _test_concurrent_requests(self, endpoint: APIEndpoint) -> List[SecurityFinding]:
-        """Test concurrent request handling"""
+        """Test concurrent request handling (FIXED: Removed async and session)"""
         findings = []
         
         concurrent_users = 20
@@ -543,7 +677,7 @@ class RateAgent:
         try:
             concurrent_result = self._execute_concurrent_test(endpoint, concurrent_users, requests_per_user)
             
-            total_expected = concurrent_users * requests_per_user
+            # total_expected = concurrent_users * requests_per_user # Unused variable removed
             success_rate = (concurrent_result.successful_requests / concurrent_result.total_requests) * 100
             
             # Poor concurrent handling
@@ -584,23 +718,26 @@ class RateAgent:
         return findings
 
     def _test_resource_exhaustion(self, endpoint: APIEndpoint) -> List[SecurityFinding]:
-        """Test for resource exhaustion vulnerabilities"""
+        """Test for resource exhaustion vulnerabilities (FIXED: Removed async and session)"""
         findings = []
         
         # Test with large payloads if endpoint accepts POST/PUT
         if endpoint.method.upper() in ['POST', 'PUT', 'PATCH']:
+            # FIX: Call synchronous method without session
             findings.extend(self._test_large_payload_handling(endpoint))
         
         # Test with complex parameters
+        # FIX: Call synchronous method without session
         findings.extend(self._test_complex_parameters(endpoint))
         
         # Test sustained load
+        # FIX: Call synchronous method without session
         findings.extend(self._test_sustained_load(endpoint))
         
         return findings
 
     def _test_large_payload_handling(self, endpoint: APIEndpoint) -> List[SecurityFinding]:
-        """Test handling of large payloads"""
+        """Test handling of large payloads (FIXED: Removed async and session)"""
         findings = []
         
         # Create progressively larger payloads
@@ -659,7 +796,7 @@ class RateAgent:
         return findings
 
     def _test_complex_parameters(self, endpoint: APIEndpoint) -> List[SecurityFinding]:
-        """Test handling of complex parameters"""
+        """Test handling of complex parameters (FIXED: Removed async and session)"""
         findings = []
         
         complex_params = {
@@ -703,7 +840,7 @@ class RateAgent:
         return findings
 
     def _test_sustained_load(self, endpoint: APIEndpoint) -> List[SecurityFinding]:
-        """Test sustained load handling"""
+        """Test sustained load handling (FIXED: Removed async and session)"""
         findings = []
         
         sustained_requests = 200
@@ -748,7 +885,7 @@ class RateAgent:
         return findings
 
     def _analyze_rate_limit_configuration(self, endpoint: APIEndpoint) -> List[SecurityFinding]:
-        """Analyze rate limiting configuration and headers"""
+        """Analyze rate limiting configuration and headers (FIXED: Removed async and session)"""
         findings = []
         
         try:
@@ -773,6 +910,7 @@ class RateAgent:
                 ))
             else:
                 # Analyze rate limit values
+                # FIX: Call synchronous method without session
                 findings.extend(self._analyze_rate_limit_values(endpoint, rate_headers))
         
         except Exception as e:
@@ -781,7 +919,7 @@ class RateAgent:
         return findings
 
     def _analyze_rate_limit_values(self, endpoint: APIEndpoint, rate_headers: Dict[str, str]) -> List[SecurityFinding]:
-        """Analyze rate limit header values for security issues"""
+        """Analyze rate limit header values for security issues (FIXED: Removed async and session)"""
         findings = []
         
         try:
@@ -838,7 +976,7 @@ class RateAgent:
         return findings
 
     def _test_ddos_resilience(self, endpoint: APIEndpoint) -> List[SecurityFinding]:
-        """Test DDoS resilience capabilities"""
+        """Test DDoS resilience capabilities (FIXED: Removed async and session)"""
         findings = []
         
         # Simulate different DDoS attack patterns
@@ -883,7 +1021,7 @@ class RateAgent:
         
         return findings
 
-    # Helper methods for executing tests
+    # Helper methods for executing tests (These are all synchronous and correct)
 
     def _execute_rate_test(self, endpoint: APIEndpoint, num_requests: int, duration: int) -> RateTestResult:
         """Execute rate limiting test with specified parameters"""
@@ -1170,39 +1308,10 @@ class RateAgent:
             requests_per_second=requests_per_second,
             error_codes=results['error_codes']
         )
-
-    def _make_request(self, endpoint: APIEndpoint) -> Optional[requests.Response]:
-        """Make a single HTTP request to the endpoint"""
-        try:
-            response = self.session.request(
-                method=endpoint.method,
-                url=endpoint.url,
-                headers=endpoint.headers,
-                params=endpoint.parameters,
-                json=endpoint.body,
-                timeout=self.timeout
-            )
-            return response
         
-        except requests.exceptions.RequestException as e:
-            logger.debug(f"Request to {endpoint.url} failed: {str(e)}")
-            return None
-
-    def _alternate_case(self, url: str) -> str:
-        """Create alternating case version of URL"""
-        result = ""
-        upper = True
-        for char in url:
-            if char.isalpha():
-                result += char.upper() if upper else char.lower()
-                upper = not upper
-            else:
-                result += char
-        return result
-
     def generate_report(self) -> Dict[str, Any]:
-        """Generate rate limiting security assessment report"""
-        if not self.findings:
+        """Generate rate limiting security assessment report (kept for completeness)"""
+        if not self.internal_findings:
             return {
                 "timestamp": datetime.now().isoformat(),
                 "agent": "RateAgent",
@@ -1216,7 +1325,7 @@ class RateAgent:
         severity_counts = {severity.value: 0 for severity in Severity}
         vulnerability_types = {}
         
-        for finding in self.findings:
+        for finding in self.internal_findings:
             severity_counts[finding.severity.value] += 1
             vulnerability_types[finding.vulnerability_type] = vulnerability_types.get(finding.vulnerability_type, 0) + 1
         
@@ -1224,7 +1333,7 @@ class RateAgent:
             "timestamp": datetime.now().isoformat(),
             "agent": "RateAgent",
             "target": self.base_url,
-            "total_findings": len(self.findings),
+            "total_findings": len(self.internal_findings),
             "severity_breakdown": severity_counts,
             "vulnerability_types": vulnerability_types,
             "findings": [
@@ -1237,9 +1346,9 @@ class RateAgent:
                     "remediation": finding.remediation,
                     "timestamp": finding.timestamp
                 }
-                for finding in self.findings
+                for finding in self.internal_findings
             ],
-            "summary": f"Found {len(self.findings)} rate limiting security issues",
+            "summary": f"Found {len(self.internal_findings)} rate limiting security issues",
             "recommendations": self._generate_recommendations()
         }
 
@@ -1247,7 +1356,7 @@ class RateAgent:
         """Generate high-level security recommendations"""
         recommendations = []
         
-        finding_types = set(finding.vulnerability_type for finding in self.findings)
+        finding_types = set(finding.vulnerability_type for finding in self.internal_findings)
         
         if "NO_RATE_LIMITING" in finding_types:
             recommendations.append("Implement comprehensive rate limiting across all API endpoints")
@@ -1271,58 +1380,3 @@ class RateAgent:
             recommendations.append("Optimize server performance and implement proper resource management")
         
         return recommendations
-
-
-# Example usage and testing
-def main():
-    """Example usage of RateAgent"""
-    
-    # Initialize agent
-    agent = RateAgent("https://api.example.com", max_workers=20)
-    
-    # Define test endpoints
-    test_endpoints = [
-        APIEndpoint(
-            url="https://api.example.com/search",
-            method="GET",
-            parameters={"q": "test"}
-        ),
-        APIEndpoint(
-            url="https://api.example.com/upload",
-            method="POST",
-            headers={"Content-Type": "application/json"},
-            body={"data": "test_data"}
-        ),
-        APIEndpoint(
-            url="https://api.example.com/admin/users",
-            method="GET",
-            headers={"Authorization": "Bearer test-token"}
-        )
-    ]
-    
-    # Analyze endpoints
-    print("Starting rate limiting security analysis...")
-    for endpoint in test_endpoints:
-        print(f"\nAnalyzing: {endpoint.method} {endpoint.url}")
-        findings = agent.analyze_endpoint(endpoint)
-        
-        for finding in findings:
-            print(f"  [{finding.severity.value}] {finding.vulnerability_type}: {finding.description}")
-    
-    # Generate report
-    report = agent.generate_report()
-    print(f"\n=== RATE LIMITING SECURITY REPORT ===")
-    print(f"Target: {report['target']}")
-    print(f"Total Findings: {report['total_findings']}")
-    print(f"Severity Breakdown: {report['severity_breakdown']}")
-    print(f"Vulnerability Types: {report['vulnerability_types']}")
-    print(f"Summary: {report['summary']}")
-    
-    if report['recommendations']:
-        print("\nRecommendations:")
-        for rec in report['recommendations']:
-            print(f"  - {rec}")
-
-
-if __name__ == "__main__":
-    main()

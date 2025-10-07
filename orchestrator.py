@@ -1,207 +1,151 @@
-# ==============================================================================
-# 1. CORE EXECUTION AGENT (input_agent.py content)
-#    (The code for this agent would typically be imported from input_agent.py)
-# ==============================================================================
+#!/usr/bin/env python3
+"""
+API Security Intelligence Orchestrator
+
+This script coordinates multiple security agents to perform a comprehensive
+vulnerability assessment on a target API.
+"""
+
 import json
-import requests
-from typing import Dict, Any, Optional, List
-import time
-from agents.input_agent import InputAgent
-from agents.auth_agent import AuthAgent
-from agents.access_agent import AccessAgent
-from agents.rate_agent import RateAgent
+from datetime import datetime
+from typing import List, Dict, Any
+from dataclasses import asdict
+
+# Import Agent Modules (Ensure all necessary libraries are installed via pip)
 from agents.docaccuracy_agent import DocAccuracyAgent
+from agents.input_agent import InputAgent
+from agents.rate_agent import RateAgent
+# Assuming the user has these agents based on the previous conversation
+from agents.auth_agent import AuthAgent 
+from agents.access_agent import AccessAgent 
 
+# --- CONFIGURATION ---
+TARGET_BASE_URL = "http://localhost:5001" # Target VAmPI or similar API endpoint
+SPEC_FILE_PATH = "openapi.json"           # Path to the OpenAPI spec (if local)
 
+# Endpoints for specific agent testing (based on common API paths)
+#TARGET_ENDPOINT_DOCS = "http://localhost:5001/docs/openapi.json"
+TARGET_ENDPOINT_DOCS = "/openapi.json"
+TARGET_ENDPOINT_SQLI = "/books/v1/search" # Example endpoint for input testing
+TARGET_PARAM_SQLI = "book_title"          # Example parameter for input testing
+TARGET_ENDPOINT_RATE = "/users/v1/profile/1" # Example endpoint for rate testing
+TARGET_ENDPOINT_AUTH = "/admin/users"       # Example endpoint for auth testing
 
-class InputAgent:
-    """Agent for testing injection vulnerabilities (SQLi, XSS, etc.)."""
-    def __init__(self, base_url: str):
-        self.findings = []
-        self.base_url = base_url
-        self.sqli_payloads: List[str] = ["1' OR 1=1 --", "admin' --", "' OR '1'='1"]
-
-    def _make_request(self, url: str, method: str, params: Dict[str, str]) -> Optional[requests.Response]:
-        """Handles sending the actual HTTP request (simplified)."""
-        print(f"    [EXECUTION] -> Sending {method} request to: {url}")
-        try:
-            # Simulated request to prevent errors if VAmPI is not running
-            response = requests.request(method, url, params=params, timeout=1)
-            return response
-        except requests.exceptions.RequestException:
-            # Simulate a successful response for a finding demonstration
-            if "1=1" in url:
-                 # Simulate a successful finding
-                class MockResponse:
-                    def __init__(self, text):
-                        self.text = text
-                        self.status_code = 200
-                    def json(self): return {}
-                return MockResponse(text="SQLITE_ERROR: syntax error")
-            return None
-
-    def test_sqli(self, endpoint: str, parameter: str, method: str) -> Optional[Dict[str, str]]:
-        """Executes a test run for SQL Injection."""
-        # Simplified: We just check the first payload for a finding demonstration
-        full_url = f"{self.base_url}{endpoint.split('{')[0]}{self.sqli_payloads[0]}"
-        response = self._make_request(full_url, method, params={})
-
-        if response and 'syntax error' in response.text.lower():
-            finding = {
-                "agent": "InputAgent",
-                "endpoint": endpoint,
-                "status": "VULNERABLE",
-                "vuln_type": "SQL Injection",
-                "severity": "HIGH",
-            }
-            self.findings.append(finding)
-            return finding
-        return {"status": "SECURE", "vuln_type": "None Found"}
-
-# ==============================================================================
-# 2. NEW MOCK AGENTS (These would be in their own files: access_agent.py, etc.)
-# ==============================================================================
-class DocAccuracyAgent:
-    """Agent for checking if the documentation matches the actual API implementation."""
+# --- MAIN ORCHESTRATOR CLASS ---
+class APISecurityOrchestrator:
     def __init__(self, base_url: str):
         self.base_url = base_url
-        self.findings = []
+        self.all_findings: List[Dict[str, Any]] = []
+
+        # Initialize Agents
+        self.docs_agent = DocAccuracyAgent(base_url=self.base_url)
+        self.input_agent = InputAgent(target_base_url=self.base_url)
+        self.rate_agent = RateAgent(target_base_url=self.base_url)
+        self.auth_agent = AuthAgent(target_base_url=self.base_url)
+        self.access_agent = AccessAgent(target_base_url=self.base_url)
+
+        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S,%f')[:-3]} - INFO - AuthAgent initialized for target: {self.base_url}")
+        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S,%f')[:-3]} - INFO - AccessAgent initialized for target: {self.base_url}")
+        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S,%f')[:-3]} - INFO - RateAgent initialized for target: {self.base_url}")
+
+
+    def run_full_scan(self):
+        print("==================================================================")
+        print(f"🛡️ Multi-Agent Security Orchestrator: Full Scan 🛡️")
+        print(f"Target: {self.base_url}")
+        print("==================================================================")
+
+        # --- PHASE 1: DocAccuracy & Inventory Management ---
+        print("\n--- PHASE 1: DocAccuracy & Inventory Management (DocAccuracyAgent) ---")
+        
+        # FIX APPLIED HERE: Changed 'spec_path' to 'doc_source'
+        docs_findings = self.docs_agent.run_check(doc_source=TARGET_ENDPOINT_DOCS)
+        self.all_findings.extend(docs_findings)
+
+        # --- PHASE 2: Input Validation & Fuzzing ---
+        print("\n--- PHASE 2: Input Validation & Fuzzing (InputAgent) ---")
+        
+        # Target an endpoint likely to be vulnerable (e.g., search or lookup)
+        input_findings = self.input_agent.run_scan(
+            endpoint_path=TARGET_ENDPOINT_SQLI, 
+            parameter=TARGET_PARAM_SQLI, 
+            method="GET"
+        )
+        self.all_findings.extend(input_findings)
+
+        # --- PHASE 3: Rate Limiting & Denial of Service ---
+        print("\n--- PHASE 3: Rate Limiting & DoS (RateAgent) ---")
+        
+        # Target an exposed endpoint with moderate complexity
+        rate_findings = self.rate_agent.run_scan(
+            endpoint_path=TARGET_ENDPOINT_RATE,
+            method="GET"
+        )
+        self.all_findings.extend(rate_findings)
+
+        # --- PHASE 4: Authentication & Authorization ---
+        print("\n--- PHASE 4: Authentication & Authorization (AuthAgent & AccessAgent) ---")
+        
+        # Test a privileged endpoint
+        auth_findings = self.auth_agent.run_scan(
+            endpoint_url=TARGET_ENDPOINT_AUTH,
+            endpoint_method="GET"
+        )
+        self.all_findings.extend(auth_findings)
+        
+        # Test BOLA/BFLA on the same privileged endpoint (assuming user 1 and user 2 exist)
+        
+        access_findings = self.access_agent.run_scan(
+            target_resource=TARGET_ENDPOINT_RATE.replace('1', '2'), 
+        )
+        self.all_findings.extend(access_findings)
+
+
+    def generate_report(self):
+        """Generates a final summary report of all findings."""
+        
+        if not self.all_findings:
+            print("\n--- SCAN COMPLETE ---")
+            print("No security findings were reported by the agents.")
+            return
+
+        print("\n==================================================================")
+        print("                   FINAL SECURITY REPORT                          ")
+        print("==================================================================")
+        print(f"Total Findings: {len(self.all_findings)}")
+        print(f"Scan Time: {datetime.now().isoformat()}")
+        print("-" * 50)
+        
+        # Group and summarize findings
+        severity_counts = {}
+        for finding in self.all_findings:
+            severity = finding.get('severity', 'Unknown')
+            severity_counts[severity] = severity_counts.get(severity, 0) + 1
+        
+        print("Severity Breakdown:")
+        for severity, count in sorted(severity_counts.items(), key=lambda item: item[0], reverse=True):
+            print(f"  - {severity:<10}: {count}")
+            
+        print("-" * 50)
+        print("Detailed Findings:")
+
+        for i, finding in enumerate(self.all_findings):
+            print(f"\n[{i+1}/{len(self.all_findings)}] {finding.get('vuln', 'Unknown Vulnerability')}")
+            print(f"  Agent   : {finding.get('agent', 'N/A')}")
+            print(f"  Endpoint: {finding.get('method', 'N/A')} {finding.get('endpoint', 'N/A')}")
+            print(f"  Severity: {finding.get('severity', 'N/A')}")
+            print(f"  Status  : {finding.get('status', 'N/A')}")
+            print(f"  Recommend: {finding.get('recommendation', 'N/A')[:100]}...")
+
+
+# --- EXECUTION ---
+if __name__ == "__main__":
+    orchestrator = APISecurityOrchestrator(TARGET_BASE_URL)
     
-    def run_check(self, spec_path: str) -> None:
-        print(f"[DOCS AGENT] Analyzing OpenAPI spec at '{spec_path}'...")
-        time.sleep(0.5)
-        # Simulate a finding: an undocumented endpoint
-        finding = {
-            "agent": "DocAccuracyAgent",
-            "endpoint": "/v1/internal/admin_data",
-            "status": "MISCONFIGURATION",
-            "vuln_type": "Improper Inventory Management (Undocumented Endpoint)",
-            "severity": "MEDIUM",
-        }
-        self.findings.append(finding)
-
-class AuthAgent:
-    """Agent for testing authentication mechanisms (API keys, JWT, OAuth flows)."""
-    def __init__(self, base_url: str):
-        self.base_url = base_url
-        self.findings = []
-
-    def test_auth_bypass(self, endpoint: str, method: str) -> None:
-        print(f"[AUTH AGENT] Attempting unauthenticated access to '{endpoint}'...")
-        time.sleep(0.5)
-        # Simulate a successful bypass attempt
-        finding = {
-            "agent": "AuthAgent",
-            "endpoint": endpoint,
-            "status": "VULNERABLE",
-            "vuln_type": "Broken Authentication (Unauthenticated Access)",
-            "severity": "CRITICAL",
-        }
-        self.findings.append(finding)
-
-class AccessAgent:
-    """Agent for testing authorization and access control (BOLA, BFLA)."""
-    def __init__(self, base_url: str):
-        self.base_url = base_url
-        self.findings = []
-
-    def test_bola(self, target_resource: str) -> None:
-        print(f"[ACCESS AGENT] Testing Broken Object Level Authorization (BOLA) on '{target_resource}'...")
-        time.sleep(0.5)
-        # Simulate a secure finding
-        print("    [RESULT] Access control check passed for BOLA.")
-
-class RateAgent:
-    """Agent for testing rate limiting, throttling, and resource consumption."""
-    def __init__(self, base_url: str):
-        self.base_url = base_url
-        self.findings = []
-
-    def test_rate_limit(self, endpoint: str) -> None:
-        print(f"[RATE AGENT] Stress-testing rate limits on '{endpoint}'...")
-        time.sleep(0.5)
-        # Simulate a finding: no rate limit
-        finding = {
-            "agent": "RateAgent",
-            "endpoint": endpoint,
-            "status": "VULNERABLE",
-            "vuln_type": "Unrestricted Resource Consumption (No Rate Limit)",
-            "severity": "HIGH",
-        }
-        self.findings.append(finding)
-
-# ==============================================================================
-# 3. THE ORCHESTRATOR LOGIC
-# ==============================================================================
-def run_full_scan():
-    """Defines the full, sequential, and orchestrated security assessment workflow."""
-    
-    API_BASE_URL = "http://localhost:5001"
-    
-    # Target defined for the scan
-    TARGET_ENDPOINT_SQLI = "/books/v1/{book_title}"
-    TARGET_ENDPOINT_AUTH = "/users/v1/profile"
-    TARGET_ENDPOINT_RATE = "/login"
-    
-    ALL_AGENTS = []
-    ALL_FINDINGS = []
-
-    print("==================================================================")
-    print("🛡️ Multi-Agent Security Orchestrator: Full Scan 🛡️")
-    print(f"Target: {API_BASE_URL}")
-    print("==================================================================")
-
-    # 1. INITIALIZE AGENTS
-    docs_agent = DocAccuracyAgent(API_BASE_URL)
-    auth_agent = AuthAgent(API_BASE_URL)
-    access_agent = AccessAgent(API_BASE_URL)
-    rate_agent = RateAgent(API_BASE_URL)
-    input_agent = InputAgent(API_BASE_URL)
-
-    ALL_AGENTS.extend([docs_agent, auth_agent, access_agent, rate_agent, input_agent])
-
-    # 2. WORKFLOW EXECUTION (Logical Security Assessment Flow)
-    
-    # --- PHASE 1: Discovery & Documentation ---
-    print("\n--- PHASE 1: DocAccuracy & Inventory Management ---")
-    docs_agent.run_check(spec_path="/docs/openapi.json")
-
-    # --- PHASE 2: Core Access Controls ---
-    print("\n--- PHASE 2: Authentication (AuthAgent) ---")
-    auth_agent.test_auth_bypass(TARGET_ENDPOINT_AUTH, "GET")
-
-    print("\n--- PHASE 3: Authorization (AccessAgent) ---")
-    access_agent.test_bola(target_resource="/accounts/123/details")
-
-    # --- PHASE 4: Abuse & Resource Consumption ---
-    print("\n--- PHASE 4: Rate Limiting (RateAgent) ---")
-    rate_agent.test_rate_limit(TARGET_ENDPOINT_RATE)
-
-    # --- PHASE 5: Input & Fuzzing ---
-    print("\n--- PHASE 5: Input Fuzzing (InputAgent) ---")
-    input_agent.test_sqli(
-        endpoint=TARGET_ENDPOINT_SQLI,
-        parameter="book_title",
-        method="GET"
-    )
-
-    # 3. CONSOLIDATE REPORTING
-    print("\n==================================================================")
-    print("                FINAL CONSOLIDATED REPORT")
-    print("==================================================================")
-
-    for agent in ALL_AGENTS:
-        if agent.findings:
-            ALL_FINDINGS.extend(agent.findings)
-
-    if ALL_FINDINGS:
-        print(f"🚨 Total Findings: {len(ALL_FINDINGS)}")
-        print(json.dumps(ALL_FINDINGS, indent=2))
-    else:
-        print("✅ No vulnerabilities found in this scan.")
-    
-    print("\n==================================================================")
-
-
-if __name__ == '__main__':
-    run_full_scan()
+    try:
+        orchestrator.run_full_scan()
+        orchestrator.generate_report()
+    except Exception as e:
+        print(f"\n!!! ORCHESTRATOR CRITICAL ERROR !!!")
+        print(f"An unhandled error occurred during the scan: {e}")
+        print("This often indicates a configuration issue, an unreachable target API, or an error within one of the agents.")
