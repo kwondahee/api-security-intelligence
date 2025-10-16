@@ -1,7 +1,6 @@
 # Existing dependencies
 requests>=2.31.0
 pyjwt>=2.8.0
-python-scapy>=0.4.0
 pyyaml>=6.0
 
 # No additional dependencies needed for basic RAG implementation
