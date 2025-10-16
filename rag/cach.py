@@ -1,7 +1,6 @@
 # rag/cache.py
 """
 Severity-Based Caching with Event-Driven Invalidation
-Implements caching strategy from midterm report Section 2.6.7
 """
 
 import time
