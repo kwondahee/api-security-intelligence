@@ -1,6 +1,18 @@
-# Existing dependencies
+# requirements.txt
+# API Security Intelligence Framework - Core Dependencies
+# Compatible with Python 3.8+
+
+# HTTP client for API requests
 requests>=2.31.0
+
+# Async HTTP client (used by rate_agent for future async operations)
+aiohttp>=3.9.0
+
+# JWT token parsing and validation
 pyjwt>=2.8.0
+
+# YAML configuration file parsing
 pyyaml>=6.0
 
-# No additional dependencies needed for basic RAG implementation
+# Note: scapy removed - not needed for orchestrator
+# Note: ML/Vector DB packages not needed for basic RAG implementation
