@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
 API Security Intelligence Orchestrator
-
+***with RAG integration***
 This script coordinates multiple security agents to perform a comprehensive
 vulnerability assessment on a target API.
 """
 
 import json
+import logging
 from datetime import datetime
 from typing import List, Dict, Any
 from dataclasses import asdict
@@ -18,6 +19,16 @@ from agents.rate_agent import RateAgent
 # Assuming the user has these agents based on the previous conversation
 from agents.auth_agent import AuthAgent 
 from agents.access_agent import AccessAgent 
+
+# Import RAG System
+from rag.rag import RAGSystem
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
 TARGET_BASE_URL = "http://localhost:5001" # Target VAmPI or similar API endpoint
@@ -33,10 +44,21 @@ TARGET_ENDPOINT_AUTH = "/admin/users"       # Example endpoint for auth testing
 
 # --- MAIN ORCHESTRATOR CLASS ---
 class APISecurityOrchestrator:
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, enable_rag: bool = True):
         self.base_url = base_url
         self.all_findings: List[Dict[str, Any]] = []
-
+        self.enable_rag = enable_rag
+        #Initialize RAG
+        if self.enable_rag:
+            try:
+                logger.info("Initializing RAG System...")
+                self.rag = RAGSystem()
+                logger.info("RAG System successfully initialized")
+            except Exception as e:
+                logger.error(f"Failed to initialize RAG: {e}"
+                logger.warning("Continuing without RAG")
+                self.enable_rag = False
+                self.rag = None
         # Initialize Agents
         self.docs_agent = DocAccuracyAgent(base_url=self.base_url)
         self.input_agent = InputAgent(target_base_url=self.base_url)
