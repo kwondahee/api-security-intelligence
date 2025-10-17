@@ -340,3 +340,72 @@ class AuthAgent:
     def _generate_recommendations(self):
         """Generates high-level security recommendations."""
         return []
+    
+
+    # --- EXECUTION BLOCK FOR STANDALONE TESTING ---
+if __name__ == "__main__":
+    TEST_TARGET_BASE_URL = "http://localhost:5001" 
+    TEST_ENDPOINT_URL = "/admin/users" # Example of a privileged endpoint
+    TEST_METHOD = "GET"
+    
+    print("=====================================================")
+    print(f"🔑 Running AuthAgent Standalone Scan on: {TEST_ENDPOINT_URL}")
+    print("=====================================================")
+    
+    # 1. Initialize the Agent
+    agent = AuthAgent(target_base_url=TEST_TARGET_BASE_URL)
+    
+    # 2. Run the specific scan
+    try:
+        findings = agent.run_scan(
+            endpoint_url=TEST_ENDPOINT_URL, 
+            endpoint_method=TEST_METHOD
+        )
+        
+        # 3. Print the results
+        print("\n--- AuthAgent Scan Complete ---")
+        if findings:
+            print(f"Found {len(findings)} Security Findings:")
+            for finding in findings:
+                print(f"  [{finding.get('severity', 'N/A')}] {finding.get('vuln', 'N/A')} on {finding.get('endpoint', 'N/A')}")
+        else:
+            print("No security findings reported.")
+
+    except Exception as e:
+        print(f"\n!!! STANDALONE AGENT CRITICAL ERROR !!!")
+        print(f"AuthAgent failed during execution: {e}")
+
+
+    # --- EXECUTION BLOCK FOR STANDALONE TESTING ---
+if __name__ == "__main__":
+    TEST_TARGET_BASE_URL = "http://localhost:5001" 
+    TEST_ENDPOINT_URL = "/admin/users" # Example of a privileged endpoint
+    TEST_METHOD = "GET"
+    
+    print("=====================================================")
+    print(f"🔑 Running AuthAgent Standalone Scan on: {TEST_ENDPOINT_URL}")
+    print("=====================================================")
+    
+    # 1. Initialize the Agent
+    agent = AuthAgent(target_base_url=TEST_TARGET_BASE_URL)
+    
+    # 2. Run the specific scan
+    try:
+        findings = agent.run_scan(
+            endpoint_url=TEST_ENDPOINT_URL, 
+            endpoint_method=TEST_METHOD
+        )
+        
+        # 3. Print the results
+        print("\n--- AuthAgent Scan Complete ---")
+        if findings:
+            print(f"Found {len(findings)} Security Findings:")
+            for finding in findings:
+                print(f"  [{finding.get('severity', 'N/A')}] {finding.get('vuln', 'N/A')} on {finding.get('endpoint', 'N/A')}")
+        else:
+            print("No security findings reported.")
+
+    except Exception as e:
+        print(f"\n!!! STANDALONE AGENT CRITICAL ERROR !!!")
+        print(f"AuthAgent failed during execution: {e}")
+        

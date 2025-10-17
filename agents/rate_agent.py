@@ -1380,3 +1380,39 @@ class RateAgent:
             recommendations.append("Optimize server performance and implement proper resource management")
         
         return recommendations
+    
+    # --- EXECUTION BLOCK FOR STANDALONE TESTING ---
+if __name__ == "__main__":
+    # Define a temporary target for direct testing
+    TEST_TARGET_BASE_URL = "http://localhost:5001" 
+    
+    # Define a specific endpoint and method to test
+    TEST_ENDPOINT_PATH = "/users/v1/profile/1"
+    TEST_METHOD = "GET"
+    
+    print("=====================================================")
+    print(f"🛡️ Running RateAgent Standalone Scan on: {TEST_ENDPOINT_PATH}")
+    print("=====================================================")
+    
+    # 1. Initialize the Agent
+    agent = RateAgent(target_base_url=TEST_TARGET_BASE_URL)
+    
+    # 2. Run the specific scan
+    try:
+        findings = agent.run_scan(
+            endpoint_path=TEST_ENDPOINT_PATH, 
+            method=TEST_METHOD
+        )
+        
+        # 3. Print the results (using the agent's internal report generator, if available)
+        print("\n--- RateAgent Scan Complete ---")
+        if findings:
+            print(f"Found {len(findings)} Security Findings:")
+            for finding in findings:
+                print(f"  [{finding['severity']}] {finding['vuln']} on {finding['endpoint']}")
+        else:
+            print("No security findings reported.")
+
+    except Exception as e:
+        print(f"\n!!! STANDALONE AGENT CRITICAL ERROR !!!")
+        print(f"RateAgent failed during execution: {e}")

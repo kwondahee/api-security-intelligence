@@ -83,10 +83,27 @@ class InputAgent:
         return finding_dict
 
     def _report_secure(self, vuln, endpoint, method, actor, evidence):
-        # Secure findings are usually not included in the final report, but we log them.
+        """
+        Record a SECURE finding. We append to self.findings so the runner
+        can produce a full audit showing which tests were executed.
+        """
+        finding_dict = asdict(Finding(
+            agent=self.name,
+            category="Input Validation",
+            vuln=vuln,
+            status="SECURE",
+            severity="None",
+            endpoint=endpoint,
+            method=method,
+            actor=actor,
+            evidence=evidence,
+            recommendation="No issue detected for this check."
+        ))
+        # Append secure check to findings so the output file records the test
+        self.findings.append(finding_dict)
         logger.info(f"[{self.name}][SECURE] {vuln} on {endpoint}")
-        # Not appended to self.findings list to reduce report clutter.
-        pass
+        return finding_dict
+
 
     def _report_error(self, vuln, endpoint, method, actor, details="Request/transport error"):
         finding_dict = asdict(Finding(
@@ -264,3 +281,45 @@ class InputAgent:
 
     
 # --- DELETED BLOCK: Removed the entire if __name__ == '__main__': block ---
+# --- EXECUTION BLOCK FOR STANDALONE TESTING (Juice Shop) ---
+if __name__ == "__main__":
+    TEST_TARGET_BASE_URL = "http://localhost:5001" 
+    
+    # # Target the vulnerable search endpoint in Juice Shop
+    # TEST_ENDPOINT_PATH = "/rest/products/search" 
+    # # The search parameter that accepts the user input
+    # TEST_PARAMETER = "q"          
+    # TEST_METHOD = "GET"
+    TEST_ENDPOINT_PATH = "/rest/user/login"
+    TEST_PARAMETER = "email"
+    TEST_METHOD = "POST"
+    
+    print("=====================================================")
+    print(f"🛡️ Running InputAgent Standalone Scan on: {TEST_ENDPOINT_PATH}")
+    print("=====================================================")
+    
+    # 1. Initialize the Agent (assuming the class is InputAgent)
+    # NOTE: Ensure InputAgent is correctly imported and accepts base_url
+    agent = InputAgent(target_base_url=TEST_TARGET_BASE_URL)
+    
+    # 2. Run the specific scan
+    try:
+        # The agent will construct the full URL: http://localhost:5001/rest/products/search?q=PAYLOAD
+        findings = agent.run_scan(
+            endpoint_path=TEST_ENDPOINT_PATH, 
+            parameter=TEST_PARAMETER,
+            method=TEST_METHOD
+        )
+        
+        # 3. Print the results
+        print("\n--- InputAgent Scan Complete ---")
+        if findings:
+            print(f"Found {len(findings)} Security Findings:")
+            for finding in findings:
+                print(f"  [{finding.get('severity', 'N/A')}] {finding.get('vuln', 'N/A')} on {finding.get('endpoint', 'N/A')}")
+        else:
+            print("No security findings reported.")
+
+    except Exception as e:
+        print(f"\n!!! STANDALONE AGENT CRITICAL ERROR !!!")
+        print(f"InputAgent failed during execution: {e}")

@@ -274,3 +274,31 @@ class DocAccuracyAgent:
 
 
 # --- END DocAccuracyAgent ---
+# --- EXECUTION BLOCK FOR STANDALONE TESTING ---
+if __name__ == "__main__":
+    TEST_TARGET_BASE_URL = "http://localhost:5001" 
+    
+    # Change this line:
+    # TEST_RESOURCE = "/openapi.json" 
+    
+    # To this line (Try the most common Swagger/OpenAPI endpoint):
+    TEST_DOC_SOURCE = "/api-docs" 
+    
+    print("=====================================================")
+    print(f"📜 Running DocAccuracyAgent Standalone Scan on: {TEST_DOC_SOURCE}")
+    print("=====================================================")
+    
+    # 1. Initialize the Agent
+    agent = DocAccuracyAgent(base_url=TEST_TARGET_BASE_URL)
+    
+    # 2. Run the check
+    try:
+        report = agent.run_check(doc_source=TEST_DOC_SOURCE)
+        
+        # 3. Print the results
+        print("\n--- DocAccuracyAgent Scan Complete ---")
+        print(json.dumps(report.get('summary'), indent=4))
+
+    except Exception as e:
+        print(f"\n!!! STANDALONE AGENT CRITICAL ERROR !!!")
+        print(f"DocAccuracyAgent failed during execution: {e}")

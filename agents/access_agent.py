@@ -43,24 +43,24 @@ class AccessAgent:
         # NOTE: Using mock tokens and IDs. For VAmPI, these should be real values
         # obtained from a successful login/token endpoint.
         MOCK_BASE = self.base_url
-        MOCK_USER_A_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.user_a_token" 
-        MOCK_USER_B_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.user_b_token" 
-        MOCK_ADMIN_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.admin_token"
+        MOCK_USER_A_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MjQsInVzZXJuYW1lIjoiIiwiZW1haWwiOiJ1c2VyMUB0ZXN0LmNvbSIsInBhc3N3b3JkIjoiNWQ5M2NlYjcwZTJiZjVkYWE4NGVjM2QwY2QyYzczMWEiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiL2Fzc2V0cy9wdWJsaWMvaW1hZ2VzL3VwbG9hZHMvZGVmYXVsdC5zdmciLCJ0b3RwU2VjcmV0IjoiIiwiaXNBY3RpdmUiOnRydWUsImNyZWF0ZWRBdCI6IjIwMjUtMTAtMTMgMDk6MDU6MjUuODIyICswMDowMCIsInVwZGF0ZWRBdCI6IjIwMjUtMTAtMTMgMDk6MDY6NTguMjUyICswMDowMCIsImRlbGV0ZWRBdCI6bnVsbH0sImlhdCI6MTc2MDM0NjQ1MH0.fXk7JpJ_AizQBsoGo0hg56Ax57yB8ZcVftIFk9LfeTvRwMBBX8fX_fr3ZfbROA2uZq2OOLl8btMYjqxl4SQC6N2D1pUkJ8a2F59wR_djmSCRjbrrWSHoryzbcy57J098rMajbJ8Pv2Alu6aZJAM6MlanJ6M1r5OwnQ4a39Pf2ZU" 
+        MOCK_USER_B_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MjQsInVzZXJuYW1lIjoiIiwiZW1haWwiOiJ1c2VyMUB0ZXN0LmNvbSIsInBhc3N3b3JkIjoiNWQ5M2NlYjcwZTJiZjVkYWE4NGVjM2QwY2QyYzczMWEiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiL2Fzc2V0cy9wdWJsaWMvaW1hZ2VzL3VwbG9hZHMvZGVmYXVsdC5zdmciLCJ0b3RwU2VjcmV0IjoiIiwiaXNBY3RpdmUiOnRydWUsImNyZWF0ZWRBdCI6IjIwMjUtMTAtMTMgMDk6MDU6MjUuODIyICswMDowMCIsInVwZGF0ZWRBdCI6IjIwMjUtMTAtMTMgMDk6MDY6NTguMjUyICswMDowMCIsImRlbGV0ZWRBdCI6bnVsbH0sImlhdCI6MTc2MDM0NjQ1MH0.fXk7JpJ_AizQBsoGo0hg56Ax57yB8ZcVftIFk9LfeTvRwMBBX8fX_fr3ZfbROA2uZq2OOLl8btMYjqxl4SQC6N2D1pUkJ8a2F59wR_djmSCRjbrrWSHoryzbcy57J098rMajbJ8Pv2Alu6aZJAM6MlanJ6M1r5OwnQ4a39Pf2ZU" 
+        MOCK_ADMIN_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MjMsInVzZXJuYW1lIjoiIiwiZW1haWwiOiJhZG1pbjEyM0B0ZXN0LmNvbSIsInBhc3N3b3JkIjoiNWQ5M2NlYjcwZTJiZjVkYWE4NGVjM2QwY2QyYzczMWEiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiMC4wLjAuMCIsInByb2ZpbGVJbWFnZSI6Ii9hc3NldHMvcHVibGljL2ltYWdlcy91cGxvYWRzL2RlZmF1bHQuc3ZnIiwidG90cFNlY3JldCI6IiIsImlzQWN0aXZlIjp0cnVlLCJjcmVhdGVkQXQiOiIyMDI1LTEwLTEzIDA4OjU5OjU1LjI0OSArMDA6MDAiLCJ1cGRhdGVkQXQiOiIyMDI1LTEwLTEzIDA4OjU5OjU1LjI0OSArMDA6MDAiLCJkZWxldGVkQXQiOm51bGx9LCJpYXQiOjE3NjAzNDYwMDZ9.TLXD3F3sVIf8BsK1uTVhqYqtSHTTuyciWuE9Hz7h3UyCbx7ZJBF8jM55eSjb1KDbKZOgN5BLksTEtzczBkXLcHDlKPPeKx9i8AGwL0NdtZoLap5SvI4VdvAuTST5SrNmCoZBurMDV3K38SDe-j28-ECgV_-lL5WzXP_4_c3n3jA"
         
         # --- Test 1: Broken Object Level Authorization (BOLA) ---
-        profile_path = "/users/v1/profile/{id}"
+        profile_path = "/rest/user/{id}"
         print(f"[ACCESS AGENT] Testing BOLA on '{profile_path}'...")
         self.test_bola(
             base=MOCK_BASE,
             path_template=profile_path,
             actor_token=MOCK_USER_A_TOKEN,
-            authorized_id="1", # User A's ID
-            unauthorized_id="2", # Attempt to access User B's ID
+            authorized_id="24", # User A's ID
+            unauthorized_id="1", # Attempt to access User B's ID
             method="GET"
         )
         
         # --- Test 2: Broken Function Level Authorization (BFLA) ---
-        admin_path = "/admin/users"
+        admin_path = "/rest/users"
         print(f"[ACCESS AGENT] Testing BFLA on '{admin_path}'...")
         self.test_bfla(
             base=MOCK_BASE,
@@ -137,15 +137,15 @@ class AccessAgent:
         return asdict(f)
 
     def _report_secure(self, vuln, endpoint, method, actor, evidence):
-        """Creates and logs a SECURE finding."""
         f = Finding(
             agent=self.name, category="Authorization", vuln=vuln, status="SECURE",
             severity="None", endpoint=endpoint, method=method, actor=actor,
             evidence=evidence, recommendation="No issue detected for this check."
         )
-        # self.findings.append(asdict(f)) # Usually commented out to reduce report noise
+        self.findings.append(asdict(f))  # ✅ Now secure results will also be shown
         logger.info(f"  [SECURE: {vuln}] {endpoint}")
         return asdict(f)
+
 
     def _report_error(self, vuln, endpoint, method, actor):
         """Creates and logs an ERROR finding."""
@@ -240,3 +240,39 @@ class AccessAgent:
             )
         else:
             return self._report_secure(vuln="TenantEscape", endpoint=url, method=method, actor="other-tenant", evidence={"other_tenant_status": r_b.status_code})
+        
+
+
+# --- EXECUTION BLOCK FOR STANDALONE TESTING ---
+if __name__ == "__main__":
+    TEST_TARGET_BASE_URL = "http://localhost:5001" 
+    # Assume user '2' is the unauthorized target resource to access
+    TEST_RESOURCE = "/rest/user/1" 
+    
+    print("=====================================================")
+    print(f"🔒 Running AccessAgent Standalone Scan on: {TEST_RESOURCE}")
+    print("=====================================================")
+    
+    # 1. Initialize the Agent
+    agent = AccessAgent(target_base_url=TEST_TARGET_BASE_URL)
+    
+    # 2. Run the specific scan
+    # Note: AccessAgent typically requires internal configuration of tokens/sessions 
+    # representing the 'attacker' user (e.g., user '1' trying to access user '2')
+    try:
+        findings = agent.run_scan(
+            target_resource=TEST_RESOURCE, 
+        )
+        
+        # 3. Print the results
+        print("\n--- AccessAgent Scan Complete ---")
+        if findings:
+            print(f"Found {len(findings)} Security Findings:")
+            for finding in findings:
+                print(f"  [{finding.get('severity', 'N/A')}] {finding.get('vuln', 'N/A')} on {finding.get('endpoint', 'N/A')}")
+        else:
+            print("No security findings reported.")
+
+    except Exception as e:
+        print(f"\n!!! STANDALONE AGENT CRITICAL ERROR !!!")
+        print(f"AccessAgent failed during execution: {e}")
