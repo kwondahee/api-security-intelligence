@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-API Security Intelligence Orchestrator with RAG Integration
+API Security Intelligence Orchestrator with LangChain RAG + Foundation-Sec-8B
 """
 
 import json
@@ -15,8 +15,9 @@ from agents.rate_agent import RateAgent
 from agents.auth_agent import AuthAgent 
 from agents.access_agent import AccessAgent
 
-# Import RAG System
+# Import RAG System with LangChain
 from rag.rag import RAGSystem
+from rag.llm import FoundationSecLLM
 
 # Configure logging
 logging.basicConfig(
@@ -34,15 +35,21 @@ TARGET_ENDPOINT_RATE = "/users/v1/profile/1"
 TARGET_ENDPOINT_AUTH = "/admin/users"
 
 class APISecurityOrchestrator:
-    def __init__(self, base_url: str, enable_rag: bool = True):
+    def __init__(
+        self, 
+        base_url: str, 
+        enable_rag: bool = True,
+        enable_llm_routing: bool = False  # Set to True to use LLM routing
+    ):
         self.base_url = base_url
         self.all_findings: List[Dict[str, Any]] = []
         self.enable_rag = enable_rag
+        self.enable_llm_routing = enable_llm_routing
 
-        # Initialize RAG System
+        # Initialize RAG System (LangChain + Milvus)
         if self.enable_rag:
             try:
-                logger.info("Initializing RAG System...")
+                logger.info("Initializing LangChain RAG System with Milvus...")
                 self.rag = RAGSystem()
                 logger.info("RAG System initialized successfully")
             except Exception as e:
@@ -52,6 +59,20 @@ class APISecurityOrchestrator:
                 self.rag = None
         else:
             self.rag = None
+
+        # Initialize Foundation-Sec-8B LLM (optional)
+        if self.enable_llm_routing:
+            try:
+                logger.info("Initializing Foundation-Sec-8B LLM...")
+                self.llm = FoundationSecLLM()
+                logger.info("LLM initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize LLM: {e}")
+                logger.warning("Continuing without LLM routing")
+                self.enable_llm_routing = False
+                self.llm = None
+        else:
+            self.llm = None
 
         # Initialize Agents
         self.docs_agent = DocAccuracyAgent(base_url=self.base_url)
@@ -63,19 +84,20 @@ class APISecurityOrchestrator:
         logger.info(f"Orchestrator initialized for target: {self.base_url}")
 
     def _enrich_with_rag(self, finding: Dict[str, Any], agent_name: str) -> Dict[str, Any]:
-        """Enrich finding with RAG-retrieved context."""
+        """Enrich finding with RAG-retrieved context using LangChain + Milvus."""
         if not self.enable_rag or not self.rag:
             return finding
         
         try:
             severity = finding.get('severity', 'MEDIUM')
             
-            # Retrieve relevant documentation
+            # Retrieve relevant documentation using LangChain
             docs = self.rag.retrieve(
                 query=None,
                 severity=severity,
                 agent_name=agent_name,
-                finding=finding
+                finding=finding,
+                top_k=5
             )
             
             if docs:
@@ -110,7 +132,7 @@ class APISecurityOrchestrator:
     
     def _build_recommendation(self, original: str, docs: List[Dict[str, Any]]) -> str:
         """Build enhanced recommendation using RAG documents."""
-        enhanced = f"{original}\n\n**Additional Guidance:**\n"
+        enhanced = f"{original}\n\n**Additional Guidance from Security Standards:**\n"
         
         for i, doc in enumerate(docs[:2], 1):
             metadata = doc.get('metadata', {})
@@ -132,11 +154,12 @@ class APISecurityOrchestrator:
         return enhanced
 
     def run_full_scan(self):
-        """Execute full security scan with RAG enhancement."""
+        """Execute full security scan with LangChain RAG enhancement."""
         print("=" * 70)
         print(f"🛡️  Multi-Agent Security Orchestrator")
         print(f"Target: {self.base_url}")
-        print(f"RAG Enhancement: {'Enabled' if self.enable_rag else 'Disabled'}")
+        print(f"RAG Enhancement: {'Enabled (LangChain + Milvus)' if self.enable_rag else 'Disabled'}")
+        print(f"LLM Routing: {'Enabled (Foundation-Sec-8B)' if self.enable_llm_routing else 'Disabled'}")
         print("=" * 70)
 
         # --- PHASE 1: Documentation Accuracy ---
@@ -202,7 +225,8 @@ class APISecurityOrchestrator:
         print("                   FINAL SECURITY REPORT                          ")
         print("=" * 70)
         print(f"Total Findings: {len(self.all_findings)}")
-        print(f"RAG Enhancement: {'Enabled' if self.enable_rag else 'Disabled'}")
+        print(f"RAG Enhancement: {'Enabled (LangChain + Milvus)' if self.enable_rag else 'Disabled'}")
+        print(f"LLM Routing: {'Enabled (Foundation-Sec-8B)' if self.enable_llm_routing else 'Disabled'}")
         print(f"Scan Time: {datetime.now().isoformat()}")
         print("-" * 70)
         
@@ -241,11 +265,11 @@ class APISecurityOrchestrator:
             if finding.get('rag_enhanced'):
                 rag_contexts = finding.get('rag_context', [])
                 if rag_contexts:
-                    print(f"  RAG Sources: {len(rag_contexts)} documents")
+                    print(f"  RAG Sources: {len(rag_contexts)} documents (Milvus + BGE-Large)")
                     for ctx in rag_contexts:
                         source = ctx.get('source', 'Unknown')
                         score = ctx.get('score', 0)
-                        print(f"    - {source} (score: {score:.2f})")
+                        print(f"    - {source} (score: {score:.3f})")
             
             recommendation = finding.get('recommendation', 'N/A')
             print(f"  Recommend: {recommendation[:150]}...")
@@ -262,6 +286,9 @@ class APISecurityOrchestrator:
                 'target': self.base_url,
                 'timestamp': datetime.now().isoformat(),
                 'rag_enabled': self.enable_rag,
+                'rag_type': 'LangChain + Milvus + BGE-Large-en-v1.5',
+                'llm_routing_enabled': self.enable_llm_routing,
+                'llm_model': 'Foundation-Sec-8B-Instruct',
                 'total_findings': len(self.all_findings)
             },
             'findings': self.all_findings
@@ -280,7 +307,11 @@ class APISecurityOrchestrator:
 
 
 if __name__ == "__main__":
-    orchestrator = APISecurityOrchestrator(TARGET_BASE_URL, enable_rag=True)
+    orchestrator = APISecurityOrchestrator(
+        TARGET_BASE_URL, 
+        enable_rag=True,
+        enable_llm_routing=False  # Set to True to enable Foundation-Sec-8B routing
+    )
     
     try:
         orchestrator.run_full_scan()

@@ -1,18 +1,29 @@
 # requirements.txt
-# API Security Intelligence Framework - Core Dependencies
-# Compatible with Python 3.8+
+# API Security Intelligence Framework with LangChain + Foundation-Sec-8B
 
-# HTTP client for API requests
+# Core dependencies
 requests>=2.31.0
-
-# Async HTTP client (used by rate_agent for future async operations)
 aiohttp>=3.9.0
-
-# JWT token parsing and validation
 pyjwt>=2.8.0
-
-# YAML configuration file parsing
 pyyaml>=6.0
 
-# Note: scapy removed - not needed for orchestrator
-# Note: ML/Vector DB packages not needed for basic RAG implementation
+# LangChain and related
+langchain>=0.1.0
+langchain-community>=0.0.20
+langchain-milvus>=0.0.1
+
+# Vector database
+pymilvus>=2.3.0
+
+# Embedding model
+sentence-transformers>=2.2.2
+
+# LLM inference
+torch>=2.0.0
+transformers>=4.35.0
+accelerate>=0.24.0
+bitsandbytes>=0.41.0
+
+# Utilities
+numpy>=1.24.0
+tqdm>=4.65.0
