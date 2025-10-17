@@ -15,18 +15,16 @@ def main():
     
     print("=== Initializing Knowledge Base ===")
     
-    # Default security documents
-    # NOTE: Metadata must be flat (strings, numbers, booleans only)
-    # Lists and nested objects are converted to JSON strings
+    # Default security documents (same as before)
     documents = [
         {
             "text": "SQL Injection is a code injection technique that exploits security vulnerabilities in an application's database layer. To prevent SQL injection attacks, always use parameterized queries or prepared statements. Never concatenate user input directly into SQL queries. Implement input validation and use stored procedures where appropriate. CWE-89 classifies this vulnerability. OWASP ranks it under A03:2021 Injection.",
             "source": "OWASP_SQL_Injection_Prevention",
             "metadata": {
-                "cwe_ids": "CWE-89",  # Convert list to string
-                "owasp_categories": "A03",  # Convert list to string
+                "cwe_ids": "CWE-89",
+                "owasp_categories": "A03",
                 "severity": "CRITICAL",
-                "keywords": "sql injection, parameterized queries, prepared statements"  # Convert list to string
+                "keywords": "sql injection, parameterized queries, prepared statements"
             }
         },
         {
@@ -133,7 +131,7 @@ def main():
             "text": "API documentation accuracy is crucial for security. Maintain up-to-date OpenAPI/Swagger specifications. Document all endpoints including authentication requirements. Identify and document shadow APIs (undocumented endpoints). Remove deprecated endpoints or clearly mark them. Implement automated testing to verify documentation matches implementation. Accurate documentation helps security teams identify and protect all API surfaces.",
             "source": "API_Documentation_Best_Practices",
             "metadata": {
-                "cwe_ids": "",  # Empty string for no CWE
+                "cwe_ids": "",
                 "owasp_categories": "API9",
                 "severity": "MEDIUM",
                 "keywords": "api documentation, openapi, swagger, shadow api, undocumented endpoints"
@@ -146,9 +144,9 @@ def main():
         print("Connecting to Milvus...")
         rag = RAGSystem()
         
-        # Add documents
+        # Add documents (skip cache invalidation during initialization)
         print(f"Adding {len(documents)} documents to vector store...")
-        rag.add_documents(documents)
+        rag.add_documents(documents, skip_cache_invalidation=True)
         
         print(f"✓ Successfully initialized knowledge base with {len(documents)} documents")
         
@@ -159,20 +157,33 @@ def main():
         
         if results:
             for i, doc in enumerate(results, 1):
-                print(f"  {i}. {doc['source']}")
-                if 'score' in doc:
-                    print(f"     Score: {doc['score']:.3f}")
+                source = doc.get('source', 'Unknown')
+                score = doc.get('score', 0)
+                print(f"  {i}. {source} (score: {score:.3f})")
+        
+        # Test another query
+        print("\nTesting query: 'BOLA authorization'...")
+        results2 = rag.retrieve("BOLA authorization", severity="HIGH", top_k=3)
+        if results2:
+            for i, doc in enumerate(results2, 1):
+                source = doc.get('source', 'Unknown')
+                score = doc.get('score', 0)
+                print(f"  {i}. {source} (score: {score:.3f})")
         
         # Test cache
-        print("\nTesting cache...")
+        print("\nTesting cache (querying SQL injection again)...")
         cached_results = rag.retrieve("SQL injection prevention", severity="CRITICAL", top_k=3)
-        print(f"✓ Cache test successful (retrieved {len(cached_results)} docs from cache)")
+        print(f"✓ Cache test successful (retrieved {len(cached_results)} docs)")
         
         # Show cache stats
         stats = rag.get_cache_stats()
         print(f"\nCache Statistics:")
         print(f"  Total entries: {stats.get('total_entries', 0)}")
         print(f"  KB version: {stats.get('kb_version', 'unknown')}")
+        
+        print("\n" + "="*50)
+        print("✓ Knowledge base initialization complete!")
+        print("="*50)
         
     except Exception as e:
         logger.error(f"Failed to initialize knowledge base: {e}")
