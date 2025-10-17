@@ -52,13 +52,13 @@ class RAGSystem:
         )
         
         # Initialize LangChain Milvus wrapper
-        # This will create the collection with the correct schema
         try:
             self.langchain_milvus = Milvus(
                 embedding_function=self.embeddings,
                 collection_name=collection_name,
                 connection_args={"host": milvus_host, "port": milvus_port},
-                drop_old=False  # Don't drop existing collection
+                drop_old=False,  # Don't drop existing collection
+                auto_id=True     # Fix auto_id warning
             )
             logger.info("RAG System initialized successfully")
         except Exception as e:
@@ -69,7 +69,8 @@ class RAGSystem:
                 embedding_function=self.embeddings,
                 collection_name=collection_name,
                 connection_args={"host": milvus_host, "port": milvus_port},
-                drop_old=True  # Drop and recreate
+                drop_old=True,   # Drop and recreate
+                auto_id=True     # Fix auto_id warning
             )
             logger.info("RAG System initialized successfully (collection recreated)")
     
@@ -120,21 +121,22 @@ class RAGSystem:
             logger.info(f"Cache HIT - {len(cached)} docs (latency: {latency:.1f}ms)")
             return cached
         
-        # Perform retrieval using LangChain
+        # Perform retrieval using LangChain with similarity scores
         try:
-            results = self.langchain_milvus.similarity_search(
+            # Use similarity_search_with_score to get scores
+            results_with_scores = self.langchain_milvus.similarity_search_with_score(
                 query=query,
                 k=top_k
             )
             
             # Convert LangChain Documents to dict format
             documents = []
-            for doc in results:
+            for doc, score in results_with_scores:
                 documents.append({
                     'text': doc.page_content,
                     'source': doc.metadata.get('source', 'Unknown'),
                     'metadata': doc.metadata,
-                    'score': doc.metadata.get('score', 0.0)
+                    'score': float(score)  # Include the actual score
                 })
             
             # Cache results
@@ -149,12 +151,13 @@ class RAGSystem:
             logger.error(f"Retrieval failed: {e}")
             return []
     
-    def add_documents(self, documents: List[Dict[str, Any]]):
+    def add_documents(self, documents: List[Dict[str, Any]], skip_cache_invalidation: bool = False):
         """
         Add documents to vector store.
         
         Args:
             documents: List of dicts with 'text', 'source', 'metadata'
+            skip_cache_invalidation: Skip cache invalidation (useful during initialization)
         """
         # Convert to LangChain Document format
         langchain_docs = []
@@ -170,8 +173,9 @@ class RAGSystem:
         # Add to vector store
         self.langchain_milvus.add_documents(langchain_docs)
         
-        # Trigger cache invalidation
-        self.cache.on_kb_update()
+        # Trigger cache invalidation only if not skipped
+        if not skip_cache_invalidation:
+            self.cache.on_kb_update()
         
         logger.info(f"Added {len(documents)} documents to vector store")
     
