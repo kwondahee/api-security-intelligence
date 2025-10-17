@@ -112,4 +112,20 @@ class RAGCache:
         self.kb_version = new_version
         
         if cache_size > 0:
-            logger.warning(f"KB updated: {old_version} -> {
+            logger.warning(f"KB updated: {old_version} -> {new_version}. "
+                         f"Invalidated {cache_size} entries.")
+        else:
+            logger.info(f"KB version updated: {old_version} -> {new_version}")
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        severity_counts = {}
+        for entry in self.cache.values():
+            sev = entry['severity']
+            severity_counts[sev] = severity_counts.get(sev, 0) + 1
+        
+        return {
+            'total_entries': len(self.cache),
+            'kb_version': self.kb_version,
+            'severity_distribution': severity_counts
+        }
