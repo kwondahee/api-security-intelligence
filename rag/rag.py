@@ -9,14 +9,13 @@ import logging
 import time
 from typing import List, Dict, Any, Optional
 
-# Updated imports - use langchain_community instead of langchain
-from langchain_community.embeddings import HuggingFaceEmbeddings
+# Use the new langchain-huggingface package
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_milvus import Milvus
 from langchain.schema import Document
 
 from rag.cache import RAGCache
 from rag.queries import QueryGenerator
-from rag.vectorstore import MilvusVectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +37,8 @@ class RAGSystem:
         collection_name: str = "security_knowledge_base"
     ):
         self.collection_name = collection_name
+        self.milvus_host = milvus_host
+        self.milvus_port = milvus_port
         self.cache = RAGCache()
         self.query_generator = QueryGenerator()
         
@@ -50,21 +51,27 @@ class RAGSystem:
             encode_kwargs={'normalize_embeddings': True}
         )
         
-        # Initialize Milvus vector store
-        self.vectorstore = MilvusVectorStore(
-            collection_name=collection_name,
-            host=milvus_host,
-            port=milvus_port
-        )
-        
         # Initialize LangChain Milvus wrapper
-        self.langchain_milvus = Milvus(
-            embedding_function=self.embeddings,
-            collection_name=collection_name,
-            connection_args={"host": milvus_host, "port": milvus_port}
-        )
-        
-        logger.info("RAG System initialized successfully")
+        # This will create the collection with the correct schema
+        try:
+            self.langchain_milvus = Milvus(
+                embedding_function=self.embeddings,
+                collection_name=collection_name,
+                connection_args={"host": milvus_host, "port": milvus_port},
+                drop_old=False  # Don't drop existing collection
+            )
+            logger.info("RAG System initialized successfully")
+        except Exception as e:
+            logger.warning(f"Collection may need to be recreated: {e}")
+            # Try dropping and recreating
+            logger.info("Attempting to recreate collection with correct schema...")
+            self.langchain_milvus = Milvus(
+                embedding_function=self.embeddings,
+                collection_name=collection_name,
+                connection_args={"host": milvus_host, "port": milvus_port},
+                drop_old=True  # Drop and recreate
+            )
+            logger.info("RAG System initialized successfully (collection recreated)")
     
     def _has_cuda(self) -> bool:
         """Check if CUDA is available."""
