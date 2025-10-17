@@ -80,4 +80,108 @@ def main():
             }
         },
         {
-            "text": "Rate limiting is essential for preventing abuse and ensuring API ava
+            "text": "Rate limiting is essential for preventing abuse and ensuring API availability. Implement rate limiting using algorithms like token bucket or sliding window. Set appropriate limits based on user roles and endpoint sensitivity. Return 429 Too Many Requests when limits are exceeded. Include rate limit headers in responses. CWE-770 addresses allocation of resources without limits.",
+            "source": "API_Rate_Limiting_Guide",
+            "metadata": {
+                "cwe_ids": "CWE-770",
+                "owasp_categories": "A04, API4",
+                "severity": "MEDIUM",
+                "keywords": "rate limiting, token bucket, dos prevention"
+            }
+        },
+        {
+            "text": "Path Traversal vulnerabilities allow attackers to access files and directories outside the intended directory. Validate and sanitize all file path inputs. Use whitelisting for allowed file names and paths. Implement canonicalization to resolve symbolic links and relative paths. Never construct file paths using user input directly. CWE-22 defines this vulnerability.",
+            "source": "Path_Traversal_Prevention",
+            "metadata": {
+                "cwe_ids": "CWE-22",
+                "owasp_categories": "A03",
+                "severity": "HIGH",
+                "keywords": "path traversal, directory traversal, canonicalization"
+            }
+        },
+        {
+            "text": "Authentication bypass vulnerabilities occur when authentication mechanisms can be circumvented. Avoid trusting client-supplied headers like X-Forwarded-For or X-Original-URL for authentication decisions. Implement server-side session management. Use secure session identifiers. Validate all authentication tokens on the server side. Never rely solely on client-side authentication. CWE-287 describes improper authentication.",
+            "source": "Authentication_Bypass_Prevention",
+            "metadata": {
+                "cwe_ids": "CWE-287",
+                "owasp_categories": "A07",
+                "severity": "CRITICAL",
+                "keywords": "authentication bypass, session management, header manipulation"
+            }
+        },
+        {
+            "text": "Weak or default credentials pose a significant security risk. Enforce strong password policies requiring minimum length, complexity, and rotation. Prohibit common passwords and default credentials. Implement account lockout after failed login attempts. Use multi-factor authentication for sensitive operations. Never hardcode credentials in source code. CWE-798 addresses use of hard-coded credentials.",
+            "source": "Credential_Management_Guide",
+            "metadata": {
+                "cwe_ids": "CWE-798, CWE-521",
+                "owasp_categories": "A07",
+                "severity": "HIGH",
+                "keywords": "weak credentials, default passwords, password policy, mfa"
+            }
+        },
+        {
+            "text": "Multi-tenancy security requires strict isolation between tenant data. Always include tenant identifiers in database queries. Validate that the authenticated user's tenant ID matches the requested resource's tenant. Use row-level security in databases. Implement tenant-aware authorization checks at every layer. Never trust client-provided tenant identifiers.",
+            "source": "Multi_Tenancy_Security_Guide",
+            "metadata": {
+                "cwe_ids": "CWE-639",
+                "owasp_categories": "API1",
+                "severity": "HIGH",
+                "keywords": "multi-tenancy, tenant isolation, cross-tenant access"
+            }
+        },
+        {
+            "text": "API documentation accuracy is crucial for security. Maintain up-to-date OpenAPI/Swagger specifications. Document all endpoints including authentication requirements. Identify and document shadow APIs (undocumented endpoints). Remove deprecated endpoints or clearly mark them. Implement automated testing to verify documentation matches implementation. Accurate documentation helps security teams identify and protect all API surfaces.",
+            "source": "API_Documentation_Best_Practices",
+            "metadata": {
+                "cwe_ids": "",  # Empty string for no CWE
+                "owasp_categories": "API9",
+                "severity": "MEDIUM",
+                "keywords": "api documentation, openapi, swagger, shadow api, undocumented endpoints"
+            }
+        }
+    ]
+    
+    try:
+        # Initialize RAG system (will connect to Milvus)
+        print("Connecting to Milvus...")
+        rag = RAGSystem()
+        
+        # Add documents
+        print(f"Adding {len(documents)} documents to vector store...")
+        rag.add_documents(documents)
+        
+        print(f"✓ Successfully initialized knowledge base with {len(documents)} documents")
+        
+        # Test retrieval
+        print("\nTesting retrieval...")
+        results = rag.retrieve("SQL injection prevention", severity="CRITICAL", top_k=3)
+        print(f"✓ Retrieved {len(results)} documents for test query")
+        
+        if results:
+            for i, doc in enumerate(results, 1):
+                print(f"  {i}. {doc['source']}")
+                if 'score' in doc:
+                    print(f"     Score: {doc['score']:.3f}")
+        
+        # Test cache
+        print("\nTesting cache...")
+        cached_results = rag.retrieve("SQL injection prevention", severity="CRITICAL", top_k=3)
+        print(f"✓ Cache test successful (retrieved {len(cached_results)} docs from cache)")
+        
+        # Show cache stats
+        stats = rag.get_cache_stats()
+        print(f"\nCache Statistics:")
+        print(f"  Total entries: {stats.get('total_entries', 0)}")
+        print(f"  KB version: {stats.get('kb_version', 'unknown')}")
+        
+    except Exception as e:
+        logger.error(f"Failed to initialize knowledge base: {e}")
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+    
+    return 0
+
+if __name__ == "__main__":
+    exit(main())
