@@ -28,6 +28,7 @@ class RAGSystem:
     - BGE-Large-en-v1.5 embeddings
     - Severity-based caching
     - Query optimization
+    - Result deduplication
     """
     
     def __init__(
@@ -82,6 +83,27 @@ class RAGSystem:
         except:
             return False
     
+    def _deduplicate_results(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Deduplicate results based on source and text content.
+        Keep the result with the highest score for duplicates.
+        """
+        seen = {}
+        
+        for doc in documents:
+            source = doc.get('source', 'Unknown')
+            text_preview = doc.get('text', '')[:100]  # First 100 chars as key
+            key = f"{source}:{text_preview}"
+            
+            if key not in seen:
+                seen[key] = doc
+            else:
+                # Keep the one with higher score
+                if doc.get('score', 0) > seen[key].get('score', 0):
+                    seen[key] = doc
+        
+        return list(seen.values())
+    
     def retrieve(
         self,
         query: str = None,
@@ -101,7 +123,7 @@ class RAGSystem:
             top_k: Number of documents to retrieve
             
         Returns:
-            List of relevant documents
+            List of relevant documents (deduplicated)
         """
         start_time = time.time()
         
@@ -123,10 +145,13 @@ class RAGSystem:
         
         # Perform retrieval using LangChain with similarity scores
         try:
+            # Retrieve more than needed to account for deduplication
+            fetch_k = top_k * 2
+            
             # Use similarity_search_with_score to get scores
             results_with_scores = self.langchain_milvus.similarity_search_with_score(
                 query=query,
-                k=top_k
+                k=fetch_k
             )
             
             # Convert LangChain Documents to dict format
@@ -138,6 +163,12 @@ class RAGSystem:
                     'metadata': doc.metadata,
                     'score': float(score)  # Include the actual score
                 })
+            
+            # Deduplicate results
+            documents = self._deduplicate_results(documents)
+            
+            # Trim to requested top_k after deduplication
+            documents = documents[:top_k]
             
             # Cache results
             self.cache.set(query, documents, severity)
