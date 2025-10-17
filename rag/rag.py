@@ -2,12 +2,15 @@
 """
 LangChain RAG System
 Implements RAG with LangChain, Milvus, and Foundation-Sec-8B
+From midterm report Section 2.2-2.6
 """
 
 import logging
 import time
 from typing import List, Dict, Any, Optional
-from langchain.embeddings import HuggingFaceEmbeddings
+
+# Updated imports - use langchain_community instead of langchain
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_milvus import Milvus
 from langchain.schema import Document
 
