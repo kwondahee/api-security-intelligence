@@ -1,6 +1,7 @@
 # rag/cache.py
 """
 Severity-Based Caching with Event-Driven Invalidation
+Implements caching strategy from midterm report Section 2.6.7
 """
 
 import time
@@ -16,9 +17,17 @@ class RAGCache:
     Different TTL values based on finding severity.
     """
     
+    # Class-level KB version (shared across instances)
+    _kb_version = None
+    
     def __init__(self):
         self.cache: Dict[str, Dict[str, Any]] = {}
-        self.kb_version = self._get_kb_version()
+        
+        # Initialize KB version once
+        if RAGCache._kb_version is None:
+            RAGCache._kb_version = str(int(time.time()))
+        
+        self.kb_version = RAGCache._kb_version
         
         # TTL configuration (seconds)
         self.ttl_config = {
@@ -33,7 +42,7 @@ class RAGCache:
     
     def _get_kb_version(self) -> str:
         """Get current knowledge base version."""
-        return str(int(time.time()))
+        return RAGCache._kb_version
     
     def _generate_key(self, query: str) -> str:
         """Generate cache key from query."""
@@ -91,26 +100,16 @@ class RAGCache:
         }
     
     def on_kb_update(self):
-        """Event-driven cache invalidation."""
+        """Event-driven cache invalidation - call when knowledge base is updated."""
         old_version = self.kb_version
-        new_version = self._get_kb_version()
         
-        if old_version != new_version:
-            cache_size = len(self.cache)
-            self.cache.clear()
-            self.kb_version = new_version
-            logger.warning(f"KB updated: {old_version} -> {new_version}. "
-                         f"Invalidated {cache_size} entries.")
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """Get cache statistics."""
-        severity_counts = {}
-        for entry in self.cache.values():
-            sev = entry['severity']
-            severity_counts[sev] = severity_counts.get(sev, 0) + 1
+        # Update the class-level version
+        RAGCache._kb_version = str(int(time.time()))
+        new_version = RAGCache._kb_version
         
-        return {
-            'total_entries': len(self.cache),
-            'kb_version': self.kb_version,
-            'severity_distribution': severity_counts
-        }
+        cache_size = len(self.cache)
+        self.cache.clear()
+        self.kb_version = new_version
+        
+        if cache_size > 0:
+            logger.warning(f"KB updated: {old_version} -> {
