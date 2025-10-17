@@ -1,6 +1,4 @@
 # requirements.txt
-# API Security Intelligence Framework with LangChain + Foundation-Sec-8B
-
 # Core dependencies
 requests>=2.31.0
 aiohttp>=3.9.0
@@ -11,6 +9,7 @@ pyyaml>=6.0
 langchain>=0.1.0
 langchain-community>=0.0.20
 langchain-milvus>=0.0.1
+langchain-huggingface>=0.1.0
 
 # Vector database
 pymilvus>=2.3.0
