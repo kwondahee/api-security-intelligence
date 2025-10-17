@@ -7,12 +7,10 @@ from rag.rag import RAGSystem
 from rag.cache import RAGCache
 from rag.queries import QueryGenerator
 from rag.llm import FoundationSecLLM
-from rag.vectorstore import MilvusVectorStore
 
 __all__ = [
     'RAGSystem', 
     'RAGCache', 
     'QueryGenerator',
-    'FoundationSecLLM',
-    'MilvusVectorStore'
+    'FoundationSecLLM'
 ]
