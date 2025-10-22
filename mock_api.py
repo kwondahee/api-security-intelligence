@@ -142,7 +142,7 @@ def track_requests():
 
 if __name__ == '__main__':
     print("=" * 70)
-    print("🔓 Mock Vulnerable API Starting...")
+    print("Mock Vulnerable API Starting...")
     print("=" * 70)
     print("Running on: http://localhost:5001")
     print("")
