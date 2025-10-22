@@ -40,7 +40,7 @@ Each finding is enhanced with relevant security guidance retrieved from a vector
 
 ## 🏗️ Architecture
 
-```
+
 ┌─────────────────────────────────────────────────────────────┐
 │                    API Security Framework                    │
 ├─────────────────────────────────────────────────────────────┤
@@ -61,7 +61,7 @@ Each finding is enhanced with relevant security guidance retrieved from a vector
 │                   ↓                                           │
 │         Enhanced Finding Report                              │
 └─────────────────────────────────────────────────────────────┘
-```
+
 
 **Technology Stack:**
 - **LangChain**: RAG orchestration
