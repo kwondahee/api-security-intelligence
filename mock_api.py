@@ -157,4 +157,20 @@ if __name__ == '__main__':
     print("=" * 70)
     print("")
     
-    app.run(host='0.0.0.0', port=5001, debug=True, use_reloader=False)
+    # Use production-ready server instead of debug mode
+    try:
+        # Try to use waitress (production WSGI server)
+        from waitress import serve
+        print("Using Waitress production server (multi-threaded)")
+        serve(app, host='0.0.0.0', port=5001, threads=10)
+    except ImportError:
+        # Fallback to Flask development server (but optimized)
+        print("Waitress not installed. Using Flask dev server (install waitress for better performance)")
+        print("  pip install waitress")
+        app.run(
+            host='0.0.0.0', 
+            port=5001, 
+            debug=False,  # Changed from True - MUCH faster
+            threaded=True,  # Enable multi-threading
+            use_reloader=False  # Disable reloader for performance
+        )
