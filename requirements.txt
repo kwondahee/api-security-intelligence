@@ -29,7 +29,7 @@ accelerate>=0.24.0
 bitsandbytes>=0.41.0
 
 # Web framework for mock API
-flask>=2.3.0
+Flask>=3.0.0
 
 # Utilities
 numpy>=1.24.0
