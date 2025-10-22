@@ -153,7 +153,7 @@ class APISecurityOrchestrator:
         
         return enhanced
 
-  def run_full_scan(self):
+      def run_full_scan(self):
         """Execute full security scan with RAG enhancement."""
         print("=" * 70)
         print(f"🛡️  Multi-Agent Security Orchestrator")
