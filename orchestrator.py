@@ -153,8 +153,8 @@ class APISecurityOrchestrator:
         
         return enhanced
 
-    def run_full_scan(self):
-        """Execute full security scan with LangChain RAG enhancement."""
+  def run_full_scan(self):
+        """Execute full security scan with RAG enhancement."""
         print("=" * 70)
         print(f"🛡️  Multi-Agent Security Orchestrator")
         print(f"Target: {self.base_url}")
@@ -165,11 +165,11 @@ class APISecurityOrchestrator:
         # --- PHASE 1: Documentation Accuracy ---
         print("\n--- PHASE 1: Documentation Accuracy (DocAccuracyAgent) ---")
         docs_findings = self.docs_agent.run_check(doc_source=TARGET_ENDPOINT_DOCS)
-        
         for finding in docs_findings:
             enriched = self._enrich_with_rag(finding, "DocAccuracyAgent")
             self.all_findings.append(enriched)
-
+        print(f"[PHASE 1 COMPLETE] Found {len(docs_findings)} documentation issues")
+    
         # --- PHASE 2: Input Validation ---
         print("\n--- PHASE 2: Input Validation (InputAgent) ---")
         input_findings = self.input_agent.run_scan(
@@ -177,106 +177,115 @@ class APISecurityOrchestrator:
             parameter=TARGET_PARAM_SQLI, 
             method="GET"
         )
-        
         for finding in input_findings:
             enriched = self._enrich_with_rag(finding, "InputAgent")
             self.all_findings.append(enriched)
-
+        print(f"[PHASE 2 COMPLETE] Found {len(input_findings)} input validation issues")
+    
         # --- PHASE 3: Rate Limiting ---
         print("\n--- PHASE 3: Rate Limiting (RateAgent) ---")
+        print("NOTE: This phase may take 30-60 seconds to test rate limiting...")
+        import time
+        phase3_start = time.time()
+        
         rate_findings = self.rate_agent.run_scan(
             endpoint_path=TARGET_ENDPOINT_RATE,
             method="GET"
         )
         
+        phase3_duration = time.time() - phase3_start
         for finding in rate_findings:
             enriched = self._enrich_with_rag(finding, "RateAgent")
             self.all_findings.append(enriched)
-
+        print(f"[PHASE 3 COMPLETE] Found {len(rate_findings)} rate limiting issues ({phase3_duration:.1f}s)")
+    
         # --- PHASE 4: Authentication ---
         print("\n--- PHASE 4: Authentication (AuthAgent) ---")
         auth_findings = self.auth_agent.run_scan(
             endpoint_url=TARGET_ENDPOINT_AUTH,
             endpoint_method="GET"
         )
-        
         for finding in auth_findings:
             enriched = self._enrich_with_rag(finding, "AuthAgent")
             self.all_findings.append(enriched)
-
+        print(f"[PHASE 4 COMPLETE] Found {len(auth_findings)} authentication issues")
+    
         # --- PHASE 5: Authorization ---
         print("\n--- PHASE 5: Authorization (AccessAgent) ---")
         access_findings = self.access_agent.run_scan(
             target_resource=TARGET_ENDPOINT_RATE.replace('1', '2')
         )
-        
         for finding in access_findings:
             enriched = self._enrich_with_rag(finding, "AccessAgent")
             self.all_findings.append(enriched)
-
-    def generate_report(self):
-        """Generate comprehensive security report."""
-        if not self.all_findings:
-            print("\n--- SCAN COMPLETE ---")
-            print("No security findings were reported.")
-            return
-
+        print(f"[PHASE 5 COMPLETE] Found {len(access_findings)} authorization issues")
+        
         print("\n" + "=" * 70)
-        print("                   FINAL SECURITY REPORT                          ")
+        print("SCAN COMPLETE - Generating report...")
         print("=" * 70)
-        print(f"Total Findings: {len(self.all_findings)}")
-        print(f"RAG Enhancement: {'Enabled (LangChain + Milvus)' if self.enable_rag else 'Disabled'}")
-        print(f"LLM Routing: {'Enabled (Foundation-Sec-8B)' if self.enable_llm_routing else 'Disabled'}")
-        print(f"Scan Time: {datetime.now().isoformat()}")
-        print("-" * 70)
-        
-        # Severity breakdown
-        severity_counts = {}
-        rag_enhanced_count = 0
-        
-        for finding in self.all_findings:
-            severity = finding.get('severity', 'Unknown')
-            severity_counts[severity] = severity_counts.get(severity, 0) + 1
-            
-            if finding.get('rag_enhanced'):
-                rag_enhanced_count += 1
-        
-        print("Severity Breakdown:")
-        for severity, count in sorted(severity_counts.items(), reverse=True):
-            print(f"  - {severity:<10}: {count}")
-        
-        if self.enable_rag:
-            print(f"\nRAG-Enhanced Findings: {rag_enhanced_count}/{len(self.all_findings)}")
-            
-            if self.rag:
-                cache_stats = self.rag.get_cache_stats()
-                print(f"Cache Entries: {cache_stats.get('total_entries', 0)}")
-        
-        print("-" * 70)
-        print("Detailed Findings:")
-
-        for i, finding in enumerate(self.all_findings, 1):
-            print(f"\n[{i}/{len(self.all_findings)}] {finding.get('vuln', 'Unknown')}")
-            print(f"  Agent   : {finding.get('agent', 'N/A')}")
-            print(f"  Endpoint: {finding.get('method', 'N/A')} {finding.get('endpoint', 'N/A')}")
-            print(f"  Severity: {finding.get('severity', 'N/A')}")
-            print(f"  Status  : {finding.get('status', 'N/A')}")
-            
-            if finding.get('rag_enhanced'):
-                rag_contexts = finding.get('rag_context', [])
-                if rag_contexts:
-                    print(f"  RAG Sources: {len(rag_contexts)} documents (Milvus + BGE-Large)")
-                    for ctx in rag_contexts:
-                        source = ctx.get('source', 'Unknown')
-                        score = ctx.get('score', 0)
-                        print(f"    - {source} (score: {score:.3f})")
-            
-            recommendation = finding.get('recommendation', 'N/A')
-            print(f"  Recommend: {recommendation[:150]}...")
-        
-        # Save to file
-        self._save_report()
+        def generate_report(self):
+            """Generate comprehensive security report."""
+            if not self.all_findings:
+                print("\n--- SCAN COMPLETE ---")
+                print("No security findings were reported.")
+                return
     
+            print("\n" + "=" * 70)
+            print("                   FINAL SECURITY REPORT                          ")
+            print("=" * 70)
+            print(f"Total Findings: {len(self.all_findings)}")
+            print(f"RAG Enhancement: {'Enabled (LangChain + Milvus)' if self.enable_rag else 'Disabled'}")
+            print(f"LLM Routing: {'Enabled (Foundation-Sec-8B)' if self.enable_llm_routing else 'Disabled'}")
+            print(f"Scan Time: {datetime.now().isoformat()}")
+            print("-" * 70)
+            
+            # Severity breakdown
+            severity_counts = {}
+            rag_enhanced_count = 0
+            
+            for finding in self.all_findings:
+                severity = finding.get('severity', 'Unknown')
+                severity_counts[severity] = severity_counts.get(severity, 0) + 1
+                
+                if finding.get('rag_enhanced'):
+                    rag_enhanced_count += 1
+            
+            print("Severity Breakdown:")
+            for severity, count in sorted(severity_counts.items(), reverse=True):
+                print(f"  - {severity:<10}: {count}")
+            
+            if self.enable_rag:
+                print(f"\nRAG-Enhanced Findings: {rag_enhanced_count}/{len(self.all_findings)}")
+                
+                if self.rag:
+                    cache_stats = self.rag.get_cache_stats()
+                    print(f"Cache Entries: {cache_stats.get('total_entries', 0)}")
+            
+            print("-" * 70)
+            print("Detailed Findings:")
+    
+            for i, finding in enumerate(self.all_findings, 1):
+                print(f"\n[{i}/{len(self.all_findings)}] {finding.get('vuln', 'Unknown')}")
+                print(f"  Agent   : {finding.get('agent', 'N/A')}")
+                print(f"  Endpoint: {finding.get('method', 'N/A')} {finding.get('endpoint', 'N/A')}")
+                print(f"  Severity: {finding.get('severity', 'N/A')}")
+                print(f"  Status  : {finding.get('status', 'N/A')}")
+                
+                if finding.get('rag_enhanced'):
+                    rag_contexts = finding.get('rag_context', [])
+                    if rag_contexts:
+                        print(f"  RAG Sources: {len(rag_contexts)} documents (Milvus + BGE-Large)")
+                        for ctx in rag_contexts:
+                            source = ctx.get('source', 'Unknown')
+                            score = ctx.get('score', 0)
+                            print(f"    - {source} (score: {score:.3f})")
+                
+                recommendation = finding.get('recommendation', 'N/A')
+                print(f"  Recommend: {recommendation[:150]}...")
+            
+            # Save to file
+            self._save_report()
+        
     def _save_report(self):
         """Save detailed report to JSON file."""
         report_path = f"security_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
