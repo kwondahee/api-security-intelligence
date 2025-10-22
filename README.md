@@ -181,12 +181,21 @@ api-security-intelligence/
 ```
 
 ## Testing
-```bash
-# Run example tests
-python3 example_usage.py
 
-# Run orchestrator with RAG
-python3 orchestrator.py
+You need **two terminal windows**:
+
+#### Terminal 1: Start Mock Vulnerable API
+```bash
+cd api-security-intelligence
+source venv/Scripts/activate
+python mock_api.py
+**Leave this running!**
+
+#### Terminal 2: Run Security Scan
+```bash
+cd api-security-intelligence
+source venv/Scripts/activate
+python orchestrator.py
 ```
 
 ## Troubleshooting
