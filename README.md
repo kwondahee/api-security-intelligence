@@ -28,10 +28,6 @@ From the midterm report:
 # Install dependencies
 pip install -r requirements.txt
 
-# Run setup script
-bash setup.sh
-```
-
 ## Usage
 
 ### With Orchestrator
