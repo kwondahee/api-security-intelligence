@@ -141,8 +141,11 @@ def track_requests():
     request_counts[ip] = request_counts.get(ip, 0) + 1
 
 if __name__ == '__main__':
+    import threading
+    import time
+    
     print("=" * 70)
-    print("Mock Vulnerable API Starting...")
+    print("[MOCK API] Vulnerable API Starting...")
     print("=" * 70)
     print("Running on: http://localhost:5001")
     print("")
@@ -157,20 +160,35 @@ if __name__ == '__main__':
     print("=" * 70)
     print("")
     
-    # Use production-ready server instead of debug mode
+    # Use production-ready server
     try:
-        # Try to use waitress (production WSGI server)
         from waitress import serve
-        print("Using Waitress production server (multi-threaded)")
+        print("[INFO] Using Waitress production server (multi-threaded)")
+        
+        # Function to test if server is ready
+        def check_server_ready():
+            time.sleep(1)  # Wait for server to start
+            try:
+                import requests
+                response = requests.get('http://localhost:5001', timeout=1)
+                print("[OK] Server is ready and responding!")
+                print("[OK] Waiting for requests... (Press Ctrl+C to stop)")
+            except:
+                print("[WARNING] Server may not be ready yet")
+        
+        # Start check in background thread
+        threading.Thread(target=check_server_ready, daemon=True).start()
+        
+        # Start server (this blocks)
         serve(app, host='0.0.0.0', port=5001, threads=10)
+        
     except ImportError:
-        # Fallback to Flask development server (but optimized)
-        print("Waitress not installed. Using Flask dev server (install waitress for better performance)")
-        print("  pip install waitress")
+        print("[WARNING] Waitress not installed. Using Flask dev server")
+        print("[WARNING] Install waitress for better performance: pip install waitress")
         app.run(
             host='0.0.0.0', 
             port=5001, 
-            debug=False,  # Changed from True - MUCH faster
-            threaded=True,  # Enable multi-threading
-            use_reloader=False  # Disable reloader for performance
+            debug=False,
+            threaded=True,
+            use_reloader=False
         )
