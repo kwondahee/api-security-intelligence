@@ -187,7 +187,7 @@ def main():
         
     except Exception as e:
         logger.error(f"Failed to initialize knowledge base: {e}")
-        print(f"❌ Error: {e}")
+        print(f"X Error: {e}")
         import traceback
         traceback.print_exc()
         return 1
