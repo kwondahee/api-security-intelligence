@@ -3,6 +3,13 @@
 Initialize Milvus knowledge base with security documents
 """
 
+# Force UTF-8 encoding for Windows
+import sys
+import io
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 import logging
 import json
 from rag.rag import RAGSystem
@@ -15,7 +22,7 @@ def main():
     
     print("=== Initializing Knowledge Base ===")
     
-    # Default security documents (same as before)
+    # Default security documents
     documents = [
         {
             "text": "SQL Injection is a code injection technique that exploits security vulnerabilities in an application's database layer. To prevent SQL injection attacks, always use parameterized queries or prepared statements. Never concatenate user input directly into SQL queries. Implement input validation and use stored procedures where appropriate. CWE-89 classifies this vulnerability. OWASP ranks it under A03:2021 Injection.",
@@ -148,12 +155,12 @@ def main():
         print(f"Adding {len(documents)} documents to vector store...")
         rag.add_documents(documents, skip_cache_invalidation=True)
         
-        print(f"✓ Successfully initialized knowledge base with {len(documents)} documents")
+        print(f"[OK] Successfully initialized knowledge base with {len(documents)} documents")
         
         # Test retrieval
         print("\nTesting retrieval...")
         results = rag.retrieve("SQL injection prevention", severity="CRITICAL", top_k=3)
-        print(f"✓ Retrieved {len(results)} documents for test query")
+        print(f"[OK] Retrieved {len(results)} documents for test query")
         
         if results:
             for i, doc in enumerate(results, 1):
@@ -173,7 +180,7 @@ def main():
         # Test cache
         print("\nTesting cache (querying SQL injection again)...")
         cached_results = rag.retrieve("SQL injection prevention", severity="CRITICAL", top_k=3)
-        print(f"✓ Cache test successful (retrieved {len(cached_results)} docs)")
+        print(f"[OK] Cache test successful (retrieved {len(cached_results)} docs)")
         
         # Show cache stats
         stats = rag.get_cache_stats()
@@ -182,12 +189,12 @@ def main():
         print(f"  KB version: {stats.get('kb_version', 'unknown')}")
         
         print("\n" + "="*50)
-        print("✓ Knowledge base initialization complete!")
+        print("[OK] Knowledge base initialization complete!")
         print("="*50)
         
     except Exception as e:
         logger.error(f"Failed to initialize knowledge base: {e}")
-        print(f"X Error: {e}")
+        print(f"[ERROR] {e}")
         import traceback
         traceback.print_exc()
         return 1
