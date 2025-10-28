@@ -17,15 +17,15 @@ from datetime import datetime
 from typing import List, Dict, Any
 
 # Import Agent Modules
-from agents.docaccuracy_agent import DocAccuracyAgent
-from agents.input_agent import InputAgent
-from agents.rate_agent import RateAgent
-from agents.auth_agent import AuthAgent 
-from agents.access_agent import AccessAgent
+from docaccuracy_agent import DocAccuracyAgent
+from input_agent import InputAgent
+from rate_agent import RateAgent
+from auth_agent import AuthAgent 
+from access_agent import AccessAgent
 
 # Import RAG System with LangChain
-from rag.rag import RAGSystem
-from rag.llm import FoundationSecLLM
+from rag import RAGSystem
+from llm import FoundationSecLLM
 
 # Configure logging
 logging.basicConfig(
