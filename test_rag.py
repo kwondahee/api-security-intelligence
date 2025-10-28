@@ -4,8 +4,8 @@ Test LangChain RAG with Milvus and Foundation-Sec-8B
 """
 
 import logging
-from rag.rag import RAGSystem
-from rag.llm import FoundationSecLLM
+from rag import RAGSystem
+from llm import FoundationSecLLM
 
 logging.basicConfig(level=logging.INFO)
 
