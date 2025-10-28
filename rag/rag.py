@@ -13,8 +13,8 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_milvus import Milvus
 from langchain.schema import Document
 
-from .cache import RAGCache
-from .queries import QueryGenerator
+from cache import RAGCache
+from queries import QueryGenerator
 
 logger = logging.getLogger(__name__)
 
