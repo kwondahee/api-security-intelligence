@@ -2,7 +2,6 @@
 """
 LangChain RAG System
 Implements RAG with LangChain, Milvus, and Foundation-Sec-8B
-From midterm report Section 2.2-2.6
 """
 
 import logging
