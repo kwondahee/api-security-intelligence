@@ -12,7 +12,7 @@ import logging
 import time
 from pathlib import Path
 
-from agents.input_agent import InputAgent
+from input_agent import InputAgent
 
 # Basic logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
