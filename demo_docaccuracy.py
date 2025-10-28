@@ -10,7 +10,7 @@ No live API is required; it uses local mock data to simulate results.
 
 import json
 import os
-from agents.docaccuracy_agent import DocAccuracyAgent, DocFormat
+from docaccuracy_agent import DocAccuracyAgent, DocFormat
 from pprint import pprint
 
 # --------------------------------------------------------------------
