@@ -12,7 +12,7 @@ if sys.platform == 'win32':
 
 import logging
 import json
-from rag.rag import RAGSystem
+from rag import RAGSystem
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
