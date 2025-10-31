@@ -1,7 +1,7 @@
 import json, time, pathlib, threading, os
 
 # Adjustable via env; default to the path we planned for systemd/logrotate
-AGENT_LOG = os.getenv("AGENT_LOG_PATH", "/var/log/api-security-intel/agents.jsonl")
+AGENT_LOG = os.getenv("AGENT_LOG_PATH", "/var/log/aether/agents.jsonl")
 
 _lock = threading.Lock()
 

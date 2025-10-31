@@ -207,10 +207,10 @@ class AuthAgent:
             {"X-Original-URL": "/admin/users"},
             {"X-Forwarded-For": "127.0.0.1"}, # Attempt to appear as localhost/internal
         ]
-        used_header = next(iter(header_set))
 
         for header_set in bypass_headers:
             headers = endpoint.headers.copy()
+            used_header = next(iter(header_set))
             # Remove existing Authorization to test if these headers grant access directly
             headers = {k: v for k, v in headers.items() if k.lower() != 'authorization'}
             headers.update(header_set)
