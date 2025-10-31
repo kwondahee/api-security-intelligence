@@ -16,6 +16,8 @@ from enum import Enum
 import logging
 from urllib.parse import urljoin, urlparse
 import yaml
+from agents.logger import emit_agent_decision
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(name)s:%(levelname)s:%(message)s')
@@ -250,6 +252,19 @@ class DocAccuracyAgent:
                     "description": issue.get('description'),
                     "recommendation": issue.get('suggestion')
                 })
+
+                try:
+                    emit_agent_decision(
+                        trace_id=None,
+                        endpoint=issue.get('endpoint') or "",
+                        agent=self.name,
+                        rule=vuln_type,       # e.g., "Undocumented-Endpoint", "Method-Mismatch"
+                        status="MISCONFIGURATION",
+                        extra={"severity": severity}
+                    )
+                except Exception:
+                    pass
+
         
         return orchestrator_findings
     

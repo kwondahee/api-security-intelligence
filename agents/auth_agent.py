@@ -17,6 +17,7 @@ from dataclasses import dataclass, field, asdict
 from enum import Enum
 import logging
 from urllib.parse import urljoin
+from agents.logger import emit_agent_decision
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -187,6 +188,9 @@ class AuthAgent:
                     evidence={"status_code": response.status_code, "response_sample": response.text[:250]},
                     remediation="Implement mandatory authentication for this endpoint. Expected response: 401 Unauthorized or 403 Forbidden."
                 ))
+                self._log(endpoint.url, "Missing-Auth", "VULNERABLE",
+                         {"status": response.status_code})
+
             
         except requests.exceptions.RequestException as e:
             logger.error(f"Request error during missing auth test on {endpoint.url}: {e}")
@@ -203,6 +207,7 @@ class AuthAgent:
             {"X-Original-URL": "/admin/users"},
             {"X-Forwarded-For": "127.0.0.1"}, # Attempt to appear as localhost/internal
         ]
+        used_header = next(iter(header_set))
 
         for header_set in bypass_headers:
             headers = endpoint.headers.copy()
@@ -223,6 +228,9 @@ class AuthAgent:
                         evidence={"status_code": response.status_code, "request_headers": header_set},
                         remediation="Ensure all authentication and authorization checks occur before processing proxy/bypass headers."
                     ))
+                    self._log(endpoint.url, "Auth-Bypass", "VULNERABLE",
+                             {"header": used_header, "status": response.status_code})
+
             except requests.exceptions.RequestException:
                 pass
         
@@ -303,6 +311,7 @@ class AuthAgent:
                     evidence={"status_code": 200, "token_used": token_none},
                     remediation="Validate JWT signature and ensure 'alg' is restricted to a set of secure algorithms."
                 ))
+                self._log(endpoint.url, "JWT-Weakness", "VULNERABLE", {"variant": "alg-none"})
         except Exception:
             pass
             
@@ -322,6 +331,7 @@ class AuthAgent:
                     evidence={"weak_secret": secret, "token_payload": json.loads(base64.urlsafe_b64decode(payload_b64 + '==').decode())},
                     remediation="Use a strong, long, and complex secret key (>32 characters) for signing JWTs."
                 ))
+                self._log(endpoint.url, "JWT-Weakness", "VULNERABLE", {"variant": "weak-secret"})
                 break # Stop after first success
             except jwt.exceptions.InvalidSignatureError:
                 continue
@@ -340,6 +350,19 @@ class AuthAgent:
     def _generate_recommendations(self):
         """Generates high-level security recommendations."""
         return []
+    
+    def _log(self, endpoint_url: str, vuln_type: str, status: str, extra: dict | None = None):
+        from urllib.parse import urlparse
+        path = urlparse(endpoint_url).path if endpoint_url else endpoint_url
+        emit_agent_decision(
+            trace_id=None,
+            endpoint=path or endpoint_url,
+            agent=self.name,
+            rule=vuln_type,      # e.g., "Missing-Auth", "JWT-alg-none", "Auth-Bypass"
+            status=status,
+            extra=extra
+        )
+
     
 
     # --- EXECUTION BLOCK FOR STANDALONE TESTING ---

@@ -7,6 +7,7 @@ from typing import Dict, Any, List, Optional
 from urllib.parse import urljoin, urlencode
 from html import unescape
 import logging
+from agents.logger import emit_agent_decision
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -80,6 +81,15 @@ class InputAgent:
             evidence=evidence, recommendation=recommendation
         ))
         self.findings.append(finding_dict)
+        emit_agent_decision(
+            trace_id=(evidence or {}).get("trace_id"),
+            endpoint=endpoint,
+            agent=self.name,
+            rule=vuln,
+            status="VULNERABLE",
+            extra={"method": method, "actor": actor}
+        )
+
         return finding_dict
 
     def _report_secure(self, vuln, endpoint, method, actor, evidence):
@@ -102,6 +112,16 @@ class InputAgent:
         # Append secure check to findings so the output file records the test
         self.findings.append(finding_dict)
         logger.info(f"[{self.name}][SECURE] {vuln} on {endpoint}")
+
+        emit_agent_decision(
+            trace_id=(evidence or {}).get("trace_id"),
+            endpoint=endpoint,
+            agent=self.name,
+            rule=vuln,
+            status="SECURE",
+            extra={"method": method, "actor": actor}
+        )
+
         return finding_dict
 
 
