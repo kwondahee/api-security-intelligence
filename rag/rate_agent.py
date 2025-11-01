@@ -11,6 +11,7 @@ from typing import Dict, Any, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from agents.logger import emit_agent_decision
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +131,15 @@ class RateAgent:
             
             # If 90%+ requests succeeded without rate limiting
             if success_count >= num_requests * 0.9:
+                emit_agent_decision(
+                    trace_id=None,
+                    endpoint=endpoint_path,
+                    agent="RateAgent",
+                    rule="NoRateLimit",
+                    status="VULNERABLE",
+                    extra={"test": "basic"}
+                )
+
                 return {
                     "agent": "RateAgent",
                     "vuln": "Missing Rate Limiting",
@@ -209,6 +219,16 @@ class RateAgent:
             
             # If most requests succeeded without rate limiting
             if rate_limited == 0 and success_count >= burst_size * 0.8:
+                
+                emit_agent_decision(
+                    trace_id=None,
+                    endpoint=endpoint_path,
+                    agent="RateAgent",
+                    rule="BurstNoLimit",
+                    status="VULNERABLE",
+                    extra={"test": "burst"}
+                )
+
                 return {
                     "agent": "RateAgent",
                     "vuln": "Inadequate Burst Traffic Handling",

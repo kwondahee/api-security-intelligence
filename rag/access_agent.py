@@ -4,6 +4,7 @@ from dataclasses import dataclass, asdict
 from typing import Dict, Any, Optional, List
 import requests
 import logging
+from agents.logger import emit_agent_decision
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -134,6 +135,16 @@ class AccessAgent:
         )
         self.findings.append(asdict(f))
         logger.warning(f"  [VULNERABLE: {vuln}] {endpoint} by {actor}")
+
+        emit_agent_decision(
+            trace_id=(evidence or {}).get("trace_id"),
+            endpoint=endpoint,
+            agent=self.name,
+            rule=vuln,               # e.g., "BOLA", "BFLA"
+            status="VULNERABLE",
+            extra={"method": method, "actor": actor}
+        )
+
         return asdict(f)
 
     def _report_secure(self, vuln, endpoint, method, actor, evidence):
@@ -144,6 +155,16 @@ class AccessAgent:
         )
         self.findings.append(asdict(f))  # ✅ Now secure results will also be shown
         logger.info(f"  [SECURE: {vuln}] {endpoint}")
+        
+        emit_agent_decision(
+            trace_id=(evidence or {}).get("trace_id"),
+            endpoint=endpoint,
+            agent=self.name,
+            rule=vuln,
+            status="SECURE",
+            extra={"method": method, "actor": actor}
+        )
+
         return asdict(f)
 
 

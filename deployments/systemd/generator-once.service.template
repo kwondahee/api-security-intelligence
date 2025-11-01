@@ -1,0 +1,19 @@
+[Unit]
+Description=AETHER Traffic Generator (one-shot demo)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+Environment=PYTHONPATH=/home/ubuntu/aether-poc
+WorkingDirectory=/home/ubuntu/aether-poc/generator
+EnvironmentFile=/home/ubuntu/aether-poc/generator/config/generator.demo.env
+ExecStart=/home/ubuntu/aether-poc/generator/venv/bin/python /home/ubuntu/aether-poc/generator/run_generator.py --env /home/ubuntu/aether-poc/generator/config/generator.demo.env
+RemainAfterExit=no
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
