@@ -79,6 +79,8 @@ def get_user(uid):
 def list_users_admin_only():
     # Should require admin, but in VULN_MODE accept any token => BFLA
     actor = bearer_actor()
+    if actor and actor != 'admin':
+    log_decision("AccessAgent", "BOLA", status="VULNERABLE", extra={"actor": actor})
     if not actor and not VULN_MODE:
         return jsonify({"error":"unauthorized"}), 401
     # if actor exists but not admin, should be 403; in VULN_MODE, we leak
@@ -114,6 +116,8 @@ def get_tenant_resource(tenantId, rid):
 def admin_users():
     actor = bearer_actor()
     # AuthAgent will try: missing auth, header bypass, odd JWT/alg=none, etc.
+    if not actor:
+        log_decision("AuthAgent", "Missing-Auth", status="VULNERABLE", extra={"status": 200})
     if not actor and not VULN_MODE:
         log_decision("AuthAgent", "Missing-Auth", status="VULNERABLE", extra={"status": 200})
         return jsonify({"error":"missing auth"}), 401
