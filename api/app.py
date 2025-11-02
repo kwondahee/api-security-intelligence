@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, g
 import os
 from datetime import datetime
 import uuid
+from agents.logger import emit_agent_decision
 
 app = Flask(__name__)
 
@@ -18,6 +19,17 @@ USERS = {
 }
 
 TENANT_RES = {("T001","R101"): {"id":"R101","tenant":"T001","data":"alpha"}}
+
+def log_decision(agent, rule, status="VULNERABLE", trace_id=None, extra=None):
+    emit_agent_decision(
+        trace_id=trace_id,
+        endpoint=request.path,
+        agent=agent,
+        rule=rule,            # e.g. "SQLi-detect", "Missing-Auth", "Traversal-detect", "XSS-detect"
+        status=status,
+        extra=extra or {}
+    )
+
 
 def bearer_actor():
     """Accepts very loose 'Authorization: Bearer user:<id>'.
@@ -74,6 +86,7 @@ def list_users_admin_only():
         return jsonify({"error":"forbidden"}), 403
 
     # return trimmed user list
+    log_decision("AccessAgent", "BOLA", status="VULNERABLE", extra={"view":"admin_list"})
     return jsonify([{"id":u["id"],"name":u["name"],"role":u["role"]} for u in USERS.values()]), 200
 
 # --- AccessAgent: Tenant escape --------------------------------------------
@@ -102,6 +115,7 @@ def admin_users():
     actor = bearer_actor()
     # AuthAgent will try: missing auth, header bypass, odd JWT/alg=none, etc.
     if not actor and not VULN_MODE:
+        log_decision("AuthAgent", "Missing-Auth", status="VULNERABLE", extra={"status": 200})
         return jsonify({"error":"missing auth"}), 401
 
     # real world: require admin
@@ -123,6 +137,7 @@ def search():
     results = [{"title":"hello"}, {"q": q}]
     # Simulate “more results” for classic ' OR 1=1 -- (heuristic)
     if "' OR 1=1" in q or '" OR 1=1' in q:
+        log_decision("InputAgent", "SQLi-detect", extra={"payload": q})
         results += [{"id":i} for i in range(5)]  # inflate result count
     return jsonify({"data": results}), 200
 
@@ -130,6 +145,9 @@ def search():
 def echo():
     # InputAgent can POST JSON with XSS payloads; we reflect it
     body = request.get_json(silent=True) or {}
+    payload = str(body)
+    if "<script" in payload.lower() or "onerror=" in payload.lower():
+        log_decision("InputAgent", "XSS-detect", extra={"payload": payload[:120]})
     return jsonify({"echo": body}), 200
 
 @app.get("/files")
@@ -138,6 +156,7 @@ def files():
     path = request.args.get("path","")
     # For PoC: if payload looks like passwd, leak signatures so agent can detect
     if "passwd" in path or ".." in path or "%2e" in path:
+        log_decision("InputAgent", "Traversal-detect", extra={"path": path})
         sample = "root:x:0:0:root:/root:/bin/bash\nwww-data:x:33:33:www-data:/var/www:/usr/sbin/nologin"
         return jsonify({"path": path, "content": sample}), 200
     return jsonify({"path": path, "content": "ok"}), 200
@@ -168,6 +187,7 @@ def openapi_doc():
 # Undocumented debug endpoint to let DocAccuracyAgent scream
 @app.get("/users/v1/_debug")
 def debug_undocumented():
+    log_decision("DocAccuracyAgent", "Undocumented-Endpoint", status="MISCONFIGURATION")
     return jsonify({"debug":"on","ts":datetime.utcnow().isoformat()}), 200
 
 # --- Main -------------------------------------------------------------------
