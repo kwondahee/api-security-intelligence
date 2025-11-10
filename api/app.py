@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, g
 import os
 from datetime import datetime
 import uuid
-from agents.logger import emit_agent_decision
+from telemetry.logger import emit_agent_decision
 
 app = Flask(__name__)
 

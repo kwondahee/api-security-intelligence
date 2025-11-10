@@ -7,7 +7,7 @@ from typing import Dict, Any, List, Optional
 from urllib.parse import urljoin, urlencode
 from html import unescape
 import logging
-from agents.logger import emit_agent_decision
+from telemetry.logger import emit_agent_decision
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

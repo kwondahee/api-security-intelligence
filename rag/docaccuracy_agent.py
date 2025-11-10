@@ -16,7 +16,7 @@ from enum import Enum
 import logging
 from urllib.parse import urljoin, urlparse
 import yaml
-from agents.logger import emit_agent_decision
+from telemetry.logger import emit_agent_decision
 
 
 # Configure logging

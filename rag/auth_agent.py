@@ -17,7 +17,7 @@ from dataclasses import dataclass, field, asdict
 from enum import Enum
 import logging
 from urllib.parse import urljoin
-from agents.logger import emit_agent_decision
+from telemetry.logger import emit_agent_decision
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

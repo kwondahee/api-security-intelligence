@@ -11,7 +11,7 @@ from typing import Dict, Any, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from agents.logger import emit_agent_decision
+from telemetry.logger import emit_agent_decision
 
 logger = logging.getLogger(__name__)
 
