@@ -1,1 +1,6 @@
 */venv
+/var/log/aether/
+*.pcap
+*.pcapng
+*.log
+*.jsonl
