@@ -6,6 +6,7 @@ Wants=network-online.target
 [Service]
 User=ubuntu
 Group=ubuntu
+Environment=PYTHONPATH=/home/ubuntu/api-security-intelligence
 WorkingDirectory=/home/ubuntu/api-security-intelligence/generator
 EnvironmentFile=/home/ubuntu/api-security-intelligence/generator/config/generator.full.env
 ExecStart=/home/ubuntu/api-security-intelligence/generator/venv/bin/python /home/ubuntu/api-security-intelligence/generator/run_generator.py --env /home/ubuntu/api-security-intelligence/generator/config/generator.full.env
