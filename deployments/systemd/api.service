@@ -6,10 +6,10 @@ Wants=network-online.target
 [Service]
 User=ubuntu
 Group=ubuntu
-Environment=PYTHONPATH=/home/ubuntu/aether-poc
-WorkingDirectory=/home/ubuntu/aether-poc/api
-EnvironmentFile=/home/ubuntu/aether-poc/api/config/api.env
-ExecStart=/home/ubuntu/aether-poc/api/venv/bin/python /home/ubuntu/aether-poc/api/app.py
+Environment=PYTHONPATH=/home/ubuntu/api-security-intelligence
+WorkingDirectory=/home/ubuntu/api-security-intelligence/api
+EnvironmentFile=/home/ubuntu/api-security-intelligence/api/config/api.env
+ExecStart=/home/ubuntu/api-security-intelligence/api/venv/bin/python /home/ubuntu/api-security-intelligence/api/app.py
 StandardOutput=journal
 StandardError=journal
 Restart=on-failure
