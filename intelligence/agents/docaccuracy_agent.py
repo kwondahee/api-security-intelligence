@@ -179,8 +179,7 @@ class DocAccuracyAgent:
         
         return {
             "summary": summary,
-            # Convert internal dataclass issues to dicts for external consumption
-            "issues": [asdict(i) for i in self.accuracy_issues], 
+            "issues": [asdict(i) for i in self.accuracy_issues],
             "documented_endpoints": [
                 {"path": ep.path, "method": ep.method, "description": ep.description} 
                 for ep in self.doc_endpoints
@@ -195,59 +194,35 @@ class DocAccuracyAgent:
     def run_check(self, doc_source: str) -> List[Dict[str, Any]]:
         """
         Main entry point for the orchestrator. Fetches, analyzes, and returns security findings.
-        
-        Args:
-            doc_source: The path or URL of the OpenAPI spec file (e.g., /docs/openapi.json).
-            
-        Returns:
-            A list of security finding dictionaries for the orchestrator.
         """
         logger.info(f"[{self.name}] Analyzing OpenAPI spec at '{self.base_url}{doc_source}'...")
         
-        # 1. Fetch and Parse Spec
         spec = self._fetch_spec(doc_source)
         if not spec:
-            return [] # Return empty list if spec cannot be fetched/parsed
+            return []
 
         self.doc_endpoints = self._parse_openapi_spec(spec)
-        
-        # 2. Discover Endpoints (Inventory Check)
         self._discover_endpoints()
-        
-        # 3. Generate internal report and extract issues
         full_report = self._generate_report()
         
-        # 4. Transform findings into the simplified dictionary format expected by the orchestrator
         orchestrator_findings = []
-        
-        # The 'issues' in full_report are already dictionaries due to asdict() in _generate_report
         for issue in full_report.get('issues', []):
-            
-            # FIX 1: Use .get() to access dictionary values instead of attribute notation
             if issue.get('category') == "endpoint":
-                
-                # Check for Undocumented Endpoints
-                # FIX 2: Use .get() to access dictionary values
                 if "undocumented" in issue.get('description', '').lower():
                     vuln_type = "Improper Inventory Management (Undocumented Endpoint)"
                     severity = "CRITICAL"
-                
-                # Check for Documented but Non-Existent Endpoints (Simulated)
-                # FIX 3: Use .get() to access dictionary values
                 elif "not found" in issue.get('description', '').lower():
                     vuln_type = "Improper Inventory Management (Non-Existent Endpoint)"
                     severity = "HIGH"
                 else:
-                    continue # Skip other less critical endpoint issues
+                    continue
                 
-                # Standardize the output dictionary
                 orchestrator_findings.append({
                     "agent": self.name,
-                    # FIX 4: Use .get() to access dictionary values
-                    "endpoint": issue.get('endpoint'), 
+                    "endpoint": issue.get('endpoint'),
                     "method": issue.get('endpoint').split(" ")[0] if issue.get('endpoint') else "N/A",
-                    "status": "MISCONFIGURATION", # Use MISCONFIGURATION for documentation issues
-                    "vuln": vuln_type, # Changed 'vuln_type' to 'vuln' for orchestrator compatibility
+                    "status": "MISCONFIGURATION",
+                    "vuln": vuln_type,
                     "severity": severity,
                     "description": issue.get('description'),
                     "recommendation": issue.get('suggestion')
@@ -258,24 +233,21 @@ class DocAccuracyAgent:
                         trace_id=None,
                         endpoint=issue.get('endpoint') or "",
                         agent=self.name,
-                        rule=vuln_type,       # e.g., "Undocumented-Endpoint", "Method-Mismatch"
+                        rule=vuln_type,
                         status="MISCONFIGURATION",
                         extra={"severity": severity}
                     )
                 except Exception:
                     pass
 
-        
         return orchestrator_findings
-    
-    
+
+
     def test_endpoint(self, path: str, method: str = "GET", **kwargs) -> Dict[str, Any]:
         """Test a specific endpoint and return detailed information"""
         try:
             url = urljoin(self.base_url, path)
-            # Prevent SSL errors if target uses self-signed certs (common in lab envs)
             response = self.session.request(method=method.upper(), url=url, timeout=self.timeout, verify=False, **kwargs)
-            
             return {
                 "status_code": response.status_code,
                 "headers": dict(response.headers),
@@ -287,33 +259,71 @@ class DocAccuracyAgent:
         except Exception as e:
             return {"error": str(e), "success": False}
 
+    # --- Unified Orchestrator Entry Point ---
+    def analyze(self, api_payload: Dict[str, Any], trace_id: Optional[str]) -> List[Dict[str, Any]]:
+        """
+        Unified entry point for orchestrator-triggered analysis.
+        Wraps run_check() and emits telemetry events.
+        """
+        doc_source = api_payload.get("doc_source") or api_payload.get("endpoint") or "/api-docs"
+        logger.info(f"[{self.name}] Starting documentation accuracy analysis for {doc_source} (trace_id={trace_id})")
+
+        try:
+            findings = self.run_check(doc_source)
+            if findings:
+                for finding in findings:
+                    emit_agent_decision(
+                        trace_id=trace_id,
+                        endpoint=finding.get("endpoint", ""),
+                        agent=self.name,
+                        rule=finding.get("vuln", "DocumentationMismatch"),
+                        status=finding.get("status", "MISCONFIGURATION"),
+                        extra={
+                            "severity": finding.get("severity", "Unknown"),
+                            "recommendation": finding.get("recommendation", "")
+                        }
+                    )
+            else:
+                emit_agent_decision(
+                    trace_id=trace_id,
+                    endpoint=doc_source,
+                    agent=self.name,
+                    rule="DocumentationAccuracy",
+                    status="SECURE",
+                    extra={"message": "No documentation inconsistencies found."}
+                )
+
+            return findings
+
+        except Exception as e:
+            logger.error(f"[{self.name}] analyze() failed: {e}", exc_info=True)
+            emit_agent_decision(
+                trace_id=trace_id,
+                endpoint=doc_source,
+                agent=self.name,
+                rule="AgentError",
+                status="ERROR",
+                extra={"exception": str(e)}
+            )
+            return []
+
 
 # --- END DocAccuracyAgent ---
 # --- EXECUTION BLOCK FOR STANDALONE TESTING ---
 if __name__ == "__main__":
     TEST_TARGET_BASE_URL = "http://localhost:5001" 
-    
-    # Change this line:
-    # TEST_RESOURCE = "/openapi.json" 
-    
-    # To this line (Try the most common Swagger/OpenAPI endpoint):
     TEST_DOC_SOURCE = "/api-docs" 
     
     print("=====================================================")
     print(f"📜 Running DocAccuracyAgent Standalone Scan on: {TEST_DOC_SOURCE}")
     print("=====================================================")
     
-    # 1. Initialize the Agent
     agent = DocAccuracyAgent(base_url=TEST_TARGET_BASE_URL)
     
-    # 2. Run the check
     try:
         report = agent.run_check(doc_source=TEST_DOC_SOURCE)
-        
-        # 3. Print the results
         print("\n--- DocAccuracyAgent Scan Complete ---")
-        print(json.dumps(report.get('summary'), indent=4))
-
+        print(json.dumps(report, indent=4))
     except Exception as e:
         print(f"\n!!! STANDALONE AGENT CRITICAL ERROR !!!")
         print(f"DocAccuracyAgent failed during execution: {e}")

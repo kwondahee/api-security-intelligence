@@ -23,6 +23,7 @@ class Finding:
     evidence: Dict[str, Any]   # redacted snippets, response meta
     recommendation: str
 
+
 class AccessAgent:
     def __init__(self, target_base_url: str, name: str = "AccessAgent", timeout: int = 8):
         self.name = name
@@ -32,6 +33,55 @@ class AccessAgent:
         self.session = requests.Session()
         logger.info(f"AccessAgent initialized for target: {self.base_url}")
 
+    # --- UNIFIED ENTRY POINT (for orchestrator) ---
+    def analyze(self, api_payload: Dict[str, Any], trace_id: Optional[str]) -> List[Dict[str, Any]]:
+        """
+        Unified entry point for orchestrator-triggered authorization analysis.
+        Wraps run_scan() and emits telemetry events.
+        """
+        target_resource = api_payload.get("target_resource") or api_payload.get("endpoint") or "/"
+        logger.info(f"[{self.name}] Starting authorization scan for {target_resource} (trace_id={trace_id})")
+
+        try:
+            findings = self.run_scan(target_resource)
+
+            if findings:
+                for finding in findings:
+                    emit_agent_decision(
+                        trace_id=trace_id,
+                        endpoint=finding.get("endpoint"),
+                        agent=self.name,
+                        rule=finding.get("vuln"),
+                        status=finding.get("status"),
+                        extra={
+                            "severity": finding.get("severity"),
+                            "actor": finding.get("actor"),
+                            "recommendation": finding.get("recommendation")
+                        }
+                    )
+            else:
+                emit_agent_decision(
+                    trace_id=trace_id,
+                    endpoint=target_resource,
+                    agent=self.name,
+                    rule="AuthorizationChecks",
+                    status="SECURE",
+                    extra={"message": "No authorization vulnerabilities found."}
+                )
+
+            return findings
+
+        except Exception as e:
+            logger.error(f"[{self.name}] analyze() failed: {e}", exc_info=True)
+            emit_agent_decision(
+                trace_id=trace_id,
+                endpoint=target_resource,
+                agent=self.name,
+                rule="AgentError",
+                status="ERROR",
+                extra={"exception": str(e)}
+            )
+            return []
 
     # --- ORCHESTRATOR ENTRY POINT (ACTIVATED TESTS) ---
     def run_scan(self, target_resource: str):
@@ -39,14 +89,12 @@ class AccessAgent:
         Wrapper method called by the orchestrator to initiate authorization tests.
         """
         print(f"[ACCESS AGENT] Initiating Authorization tests for: {target_resource}")
-        self.findings = [] # Reset findings
+        self.findings = []  # Reset findings
 
-        # NOTE: Using mock tokens and IDs. For VAmPI, these should be real values
-        # obtained from a successful login/token endpoint.
         MOCK_BASE = self.base_url
-        MOCK_USER_A_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MjQsInVzZXJuYW1lIjoiIiwiZW1haWwiOiJ1c2VyMUB0ZXN0LmNvbSIsInBhc3N3b3JkIjoiNWQ5M2NlYjcwZTJiZjVkYWE4NGVjM2QwY2QyYzczMWEiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiL2Fzc2V0cy9wdWJsaWMvaW1hZ2VzL3VwbG9hZHMvZGVmYXVsdC5zdmciLCJ0b3RwU2VjcmV0IjoiIiwiaXNBY3RpdmUiOnRydWUsImNyZWF0ZWRBdCI6IjIwMjUtMTAtMTMgMDk6MDU6MjUuODIyICswMDowMCIsInVwZGF0ZWRBdCI6IjIwMjUtMTAtMTMgMDk6MDY6NTguMjUyICswMDowMCIsImRlbGV0ZWRBdCI6bnVsbH0sImlhdCI6MTc2MDM0NjQ1MH0.fXk7JpJ_AizQBsoGo0hg56Ax57yB8ZcVftIFk9LfeTvRwMBBX8fX_fr3ZfbROA2uZq2OOLl8btMYjqxl4SQC6N2D1pUkJ8a2F59wR_djmSCRjbrrWSHoryzbcy57J098rMajbJ8Pv2Alu6aZJAM6MlanJ6M1r5OwnQ4a39Pf2ZU" 
-        MOCK_USER_B_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MjQsInVzZXJuYW1lIjoiIiwiZW1haWwiOiJ1c2VyMUB0ZXN0LmNvbSIsInBhc3N3b3JkIjoiNWQ5M2NlYjcwZTJiZjVkYWE4NGVjM2QwY2QyYzczMWEiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiIiwicHJvZmlsZUltYWdlIjoiL2Fzc2V0cy9wdWJsaWMvaW1hZ2VzL3VwbG9hZHMvZGVmYXVsdC5zdmciLCJ0b3RwU2VjcmV0IjoiIiwiaXNBY3RpdmUiOnRydWUsImNyZWF0ZWRBdCI6IjIwMjUtMTAtMTMgMDk6MDU6MjUuODIyICswMDowMCIsInVwZGF0ZWRBdCI6IjIwMjUtMTAtMTMgMDk6MDY6NTguMjUyICswMDowMCIsImRlbGV0ZWRBdCI6bnVsbH0sImlhdCI6MTc2MDM0NjQ1MH0.fXk7JpJ_AizQBsoGo0hg56Ax57yB8ZcVftIFk9LfeTvRwMBBX8fX_fr3ZfbROA2uZq2OOLl8btMYjqxl4SQC6N2D1pUkJ8a2F59wR_djmSCRjbrrWSHoryzbcy57J098rMajbJ8Pv2Alu6aZJAM6MlanJ6M1r5OwnQ4a39Pf2ZU" 
-        MOCK_ADMIN_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MjMsInVzZXJuYW1lIjoiIiwiZW1haWwiOiJhZG1pbjEyM0B0ZXN0LmNvbSIsInBhc3N3b3JkIjoiNWQ5M2NlYjcwZTJiZjVkYWE4NGVjM2QwY2QyYzczMWEiLCJyb2xlIjoiY3VzdG9tZXIiLCJkZWx1eGVUb2tlbiI6IiIsImxhc3RMb2dpbklwIjoiMC4wLjAuMCIsInByb2ZpbGVJbWFnZSI6Ii9hc3NldHMvcHVibGljL2ltYWdlcy91cGxvYWRzL2RlZmF1bHQuc3ZnIiwidG90cFNlY3JldCI6IiIsImlzQWN0aXZlIjp0cnVlLCJjcmVhdGVkQXQiOiIyMDI1LTEwLTEzIDA4OjU5OjU1LjI0OSArMDA6MDAiLCJ1cGRhdGVkQXQiOiIyMDI1LTEwLTEzIDA4OjU5OjU1LjI0OSArMDA6MDAiLCJkZWxldGVkQXQiOm51bGx9LCJpYXQiOjE3NjAzNDYwMDZ9.TLXD3F3sVIf8BsK1uTVhqYqtSHTTuyciWuE9Hz7h3UyCbx7ZJBF8jM55eSjb1KDbKZOgN5BLksTEtzczBkXLcHDlKPPeKx9i8AGwL0NdtZoLap5SvI4VdvAuTST5SrNmCoZBurMDV3K38SDe-j28-ECgV_-lL5WzXP_4_c3n3jA"
+        MOCK_USER_A_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9..." 
+        MOCK_USER_B_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9..." 
+        MOCK_ADMIN_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9..." 
         
         # --- Test 1: Broken Object Level Authorization (BOLA) ---
         profile_path = "/rest/user/{id}"
@@ -55,8 +103,8 @@ class AccessAgent:
             base=MOCK_BASE,
             path_template=profile_path,
             actor_token=MOCK_USER_A_TOKEN,
-            authorized_id="24", # User A's ID
-            unauthorized_id="1", # Attempt to access User B's ID
+            authorized_id="24",
+            unauthorized_id="1",
             method="GET"
         )
         
@@ -71,7 +119,6 @@ class AccessAgent:
         )
         
         # --- Test 3: Tenant Escape ---
-        # NOTE: This test requires a multi-tenant API setup, but is included for completeness.
         self.test_tenant_escape(
             base=MOCK_BASE,
             path_template="/v2/tenant/{tenantId}/resources/{id}",
@@ -86,7 +133,6 @@ class AccessAgent:
 
     # --- helpers ---
     def _req(self, method: str, url: str, token: str, json_body: Optional[dict] = None):
-        """HTTP request helper."""
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
         try:
             r = self.session.request(method, url, headers=headers, json=json_body, timeout=self.timeout)
@@ -116,18 +162,14 @@ class AccessAgent:
             return redacted
         return body
 
-    # --- utilities for reporting & similarity (THE CORRECTLY INTEGRATED BLOCK) ---
     def _looks_like_same_resource(self, body_a: Any, body_b: Any) -> bool:
-        """Heuristically checks if two JSON bodies look like the same resource."""
         if not isinstance(body_a, dict) or not isinstance(body_b, dict):
             return False
         keys_a, keys_b = set(body_a.keys()), set(body_b.keys())
         common = len(keys_a & keys_b)
-        # Check if more than half the keys are common (and at least 3)
         return common >= max(3, min(len(keys_a), len(keys_b)) // 2)
 
     def _report_vuln(self, vuln, severity, endpoint, method, actor, evidence, recommendation):
-        """Creates and logs a VULNERABLE finding."""
         f = Finding(
             agent=self.name, category="Authorization", vuln=vuln, status="VULNERABLE",
             severity=severity, endpoint=endpoint, method=method, actor=actor,
@@ -140,7 +182,7 @@ class AccessAgent:
             trace_id=(evidence or {}).get("trace_id"),
             endpoint=endpoint,
             agent=self.name,
-            rule=vuln,               # e.g., "BOLA", "BFLA"
+            rule=vuln,
             status="VULNERABLE",
             extra={"method": method, "actor": actor}
         )
@@ -153,7 +195,7 @@ class AccessAgent:
             severity="None", endpoint=endpoint, method=method, actor=actor,
             evidence=evidence, recommendation="No issue detected for this check."
         )
-        self.findings.append(asdict(f))  # ✅ Now secure results will also be shown
+        self.findings.append(asdict(f))
         logger.info(f"  [SECURE: {vuln}] {endpoint}")
         
         emit_agent_decision(
@@ -167,9 +209,7 @@ class AccessAgent:
 
         return asdict(f)
 
-
     def _report_error(self, vuln, endpoint, method, actor):
-        """Creates and logs an ERROR finding."""
         f = Finding(
             agent=self.name, category="Authorization", vuln=vuln, status="ERROR",
             severity="Unknown", endpoint=endpoint, method=method, actor=actor,
@@ -180,22 +220,16 @@ class AccessAgent:
         logger.error(f"  [ERROR: {vuln}] {endpoint} - Check target.")
         return asdict(f)
 
-
     # --- functional tests ---
     def test_bola(self, base: str, path_template: str, actor_token: str,
                   authorized_id: str, unauthorized_id: str, method: str = "GET"):
-        """
-        Tests Broken Object Level Authorization (BOLA).
-        """
         endpoint_authz = base + path_template.format(id=authorized_id)
         endpoint_unauthz = base + path_template.format(id=unauthorized_id)
 
-        # 1. Get user's own (authorized) resource
         r_ok, meta_ok, body_ok = self._req(method, endpoint_authz, actor_token)
         if r_ok is None:
             return self._report_error("BOLA", endpoint_authz, method, "self")
 
-        # 2. Get unauthorized user's resource (attempted BOLA)
         r_bad, meta_bad, body_bad = self._req(method, endpoint_unauthz, actor_token)
         if r_bad is None:
             return self._report_error("BOLA", endpoint_unauthz, method, "self→other")
@@ -215,10 +249,6 @@ class AccessAgent:
 
     def test_bfla(self, base: str, admin_only_path: str, low_priv_token: str, method: str = "POST",
                   payload: Optional[dict] = None):
-        """
-        Tests Broken Function Level Authorization (BFLA) by trying an admin-only action
-        with a low-privilege token.
-        """
         endpoint = base + admin_only_path
         r, meta, body = self._req(method, endpoint, low_priv_token, json_body=payload or {})
         if r is None:
@@ -236,14 +266,9 @@ class AccessAgent:
 
     def test_tenant_escape(self, base: str, path_template: str, token_a: str, token_b: str, tenant_id_a: str,
                            resource_in_a: str, method: str = "GET"):
-        """
-        Tests multi-tenancy issues (Tenant Escape).
-        """
         url = base + path_template.format(tenantId=tenant_id_a, id=resource_in_a)
         
-        # User A (authorized tenant) accesses resource
         r_a, _, body_a = self._req(method, url, token_a)
-        # User B (unauthorized tenant) accesses same resource
         r_b, _, body_b = self._req(method, url, token_b)
 
         if r_a is None or r_b is None:
@@ -261,31 +286,21 @@ class AccessAgent:
             )
         else:
             return self._report_secure(vuln="TenantEscape", endpoint=url, method=method, actor="other-tenant", evidence={"other_tenant_status": r_b.status_code})
-        
 
 
 # --- EXECUTION BLOCK FOR STANDALONE TESTING ---
 if __name__ == "__main__":
     TEST_TARGET_BASE_URL = "http://localhost:5001" 
-    # Assume user '2' is the unauthorized target resource to access
     TEST_RESOURCE = "/rest/user/1" 
     
     print("=====================================================")
     print(f"🔒 Running AccessAgent Standalone Scan on: {TEST_RESOURCE}")
     print("=====================================================")
     
-    # 1. Initialize the Agent
     agent = AccessAgent(target_base_url=TEST_TARGET_BASE_URL)
     
-    # 2. Run the specific scan
-    # Note: AccessAgent typically requires internal configuration of tokens/sessions 
-    # representing the 'attacker' user (e.g., user '1' trying to access user '2')
     try:
-        findings = agent.run_scan(
-            target_resource=TEST_RESOURCE, 
-        )
-        
-        # 3. Print the results
+        findings = agent.run_scan(target_resource=TEST_RESOURCE)
         print("\n--- AccessAgent Scan Complete ---")
         if findings:
             print(f"Found {len(findings)} Security Findings:")
@@ -293,7 +308,6 @@ if __name__ == "__main__":
                 print(f"  [{finding.get('severity', 'N/A')}] {finding.get('vuln', 'N/A')} on {finding.get('endpoint', 'N/A')}")
         else:
             print("No security findings reported.")
-
     except Exception as e:
         print(f"\n!!! STANDALONE AGENT CRITICAL ERROR !!!")
         print(f"AccessAgent failed during execution: {e}")
