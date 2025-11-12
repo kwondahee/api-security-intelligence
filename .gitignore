@@ -4,3 +4,4 @@
 *.pcapng
 *.log
 *.jsonl
+*.pyc
