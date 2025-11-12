@@ -1,5 +1,5 @@
 IFACE=any
-FILTER=tcp port 8080
+FILTER="tcp port 8080"
 PCAP_DIR=/var/log/tcpdump
 BASENAME=api_traffic.pcap
 SNAPLEN=0
