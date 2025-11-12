@@ -7,7 +7,7 @@ Wants=network-online.target
 User=root
 EnvironmentFile=/etc/default/api-capture
 ExecStartPre=/usr/bin/mkdir -p ${PCAP_DIR}
-ExecStart=/usr/bin/tcpdump -i ${IFACE} -s ${SNAPLEN} -U \
+ExecStart=/usr/sbin/tcpdump -i ${IFACE} -s ${SNAPLEN} -U \
           -w ${PCAP_DIR}/${BASENAME} -C ${FILESIZE} -W ${COUNT} ${FILTER}
 Restart=always
 RestartSec=2
