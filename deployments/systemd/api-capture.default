@@ -1,0 +1,7 @@
+IFACE=any
+FILTER=tcp port 8080
+PCAP_DIR=/var/log/aether
+BASENAME=api_traffic.pcap
+SNAPLEN=0
+FILESIZE=100
+COUNT=10

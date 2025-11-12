@@ -1,0 +1,16 @@
+[Unit]
+Description=AETHER API tcpdump capture
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=root
+EnvironmentFile=/etc/default/api-capture
+ExecStartPre=/usr/bin/mkdir -p ${PCAP_DIR}
+ExecStart=/usr/sbin/tcpdump -i ${IFACE} -s ${SNAPLEN} -U \
+          -w ${PCAP_DIR}/${BASENAME} -C ${FILESIZE} -W ${COUNT} ${FILTER}
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
