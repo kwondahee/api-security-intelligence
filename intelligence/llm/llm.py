@@ -1,111 +1,168 @@
-# rag/llm.py
 """
-Foundation-Sec-8B LLM Integration
+Foundation-Sec-8B LLM Integration (RAG-Enhanced Routing + JSONL Logging)
 """
 
 import logging
 import torch
-from typing import Dict, Any, Optional
+import time
+from typing import Dict, Any
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+
+from llm.rag import RAGSystem
+from telemetry.logger import emit_agent_decision  # ✅ use your existing JSONL logger
 
 logger = logging.getLogger(__name__)
 
+
 class FoundationSecLLM:
     """
-    Foundation-Sec-8B model for routing API requests to appropriate agents.
-    Uses 4-bit quantization for efficient inference.
+    Foundation-Sec-8B model for routing API requests to appropriate agents,
+    enhanced with RAG knowledge and logged reasoning.
     """
-    
+
     def __init__(self, model_name: str = "fdtn-ai/Foundation-Sec-8B-Instruct"):
         self.model_name = model_name
         self.tokenizer = None
         self.model = None
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        
+
+        # Initialize RAG system
+        logger.info("Initializing Foundation-Sec-8B LLM with RAG integration...")
+        self.rag = RAGSystem()
+
         logger.info(f"Initializing Foundation-Sec-8B on {self.device}...")
         self._load_model()
-    
+
     def _load_model(self):
-        """Load model with 4-bit quantization (from midterm report)."""
+        """Load model with optional quantization and CPU fallback."""
         try:
-            # Configure 4-bit quantization
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.float16
-            )
-            
-            # Load tokenizer
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            
-            # Load model with quantization
+
+            if self.device == "cuda":
+                try:
+                    bnb_config = BitsAndBytesConfig(
+                        load_in_4bit=True,
+                        bnb_4bit_use_double_quant=True,
+                        bnb_4bit_quant_type="nf4",
+                        bnb_4bit_compute_dtype=torch.float16
+                    )
+                    self.model = AutoModelForCausalLM.from_pretrained(
+                        self.model_name,
+                        quantization_config=bnb_config,
+                        device_map="auto",
+                        trust_remote_code=True
+                    )
+                    logger.info("Foundation-Sec-8B loaded successfully in 4-bit CUDA mode.")
+                    return
+                except Exception as quant_e:
+                    logger.warning(f"Quantized load failed: {quant_e}")
+                    logger.info("Falling back to full-precision CUDA model...")
+                    self.model = AutoModelForCausalLM.from_pretrained(
+                        self.model_name,
+                        device_map="auto",
+                        torch_dtype=torch.float16,
+                        trust_remote_code=True
+                    )
+                    logger.info("Foundation-Sec-8B loaded successfully (CUDA full precision).")
+                    return
+
+            # CPU fallback
+            logger.warning("No CUDA detected or GPU load failed — using CPU mode.")
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
-                quantization_config=bnb_config,
-                device_map="auto",
+                device_map="cpu",
+                torch_dtype=torch.float32,
                 trust_remote_code=True
             )
-            
-            logger.info("Foundation-Sec-8B loaded successfully")
-            
+            logger.info("Foundation-Sec-8B loaded successfully on CPU.")
+
         except Exception as e:
             logger.error(f"Failed to load Foundation-Sec-8B: {e}")
             raise
-    
+
     def route_to_agent(self, api_payload: Dict[str, Any]) -> str:
         """
-        Route API payload to appropriate agent using LLM.
-        
-        Args:
-            api_payload: Parsed API request (from dissector)
-            
-        Returns:
-            Agent name (InputAgent, AuthAgent, AccessAgent, RateAgent, DocAccuracyAgent)
+        Route API payload to appropriate agent using LLM + RAG context,
+        and log reasoning into agents.jsonl.
         """
-        prompt = self._build_routing_prompt(api_payload)
-        
         try:
-            # Tokenize
+            # Step 1: Retrieve relevant context from RAG
+            rag_query = f"{api_payload.get('method', 'GET')} {api_payload.get('endpoint', '/')}"
+            rag_docs = self.rag.retrieve(query=rag_query, top_k=3)
+
+            # Combine retrieved docs into readable context
+            context_text = "\n\n".join([doc["text"][:400] for doc in rag_docs]) if rag_docs else "No relevant documents found."
+
+            # Step 2: Build RAG-informed routing prompt
+            prompt = self._build_routing_prompt(api_payload, context_text)
+
+            # Step 3: Run inference
+            start_time = time.time()
             inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
-            
-            # Generate
             with torch.no_grad():
                 outputs = self.model.generate(
                     **inputs,
-                    max_new_tokens=50,
-                    temperature=0.1,  # Low temperature for deterministic routing
+                    max_new_tokens=120,
+                    temperature=0.1,
                     do_sample=False,
                     pad_token_id=self.tokenizer.eos_token_id
                 )
-            
-            # Decode
+
             response = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-            
-            # Extract agent name from response
+            latency = (time.time() - start_time)
             agent_name = self._extract_agent_name(response)
-            
-            logger.info(f"LLM routed request to: {agent_name}")
+
+            logger.info(f"LLM (RAG-informed) routed request to: {agent_name}")
+
+            # Step 4: Log reasoning into agents.jsonl
+            rag_sources = [doc.get("source", "Unknown") for doc in rag_docs]
+            emit_agent_decision(
+                trace_id=None,
+                endpoint=api_payload.get("endpoint", "Unknown"),
+                agent="LLM-Router",
+                rule="RAG-informed-routing",
+                status="REASONED",
+                extra={
+                    "chosen_agent": agent_name,
+                    "reasoning": response.strip()[:2000],
+                    "rag_sources": rag_sources,
+                    "latency_sec": round(latency, 2)
+                }
+            )
+
             return agent_name
-            
+
         except Exception as e:
             logger.error(f"LLM routing failed: {e}")
-            return "InputAgent"  # Default fallback
-    
-    def _build_routing_prompt(self, api_payload: Dict[str, Any]) -> str:
-        """Build prompt for agent routing."""
+            emit_agent_decision(
+                trace_id=None,
+                endpoint=api_payload.get("endpoint", "Unknown"),
+                agent="LLM-Router",
+                rule="RAG-informed-routing",
+                status="ERROR",
+                extra={"error": str(e)}
+            )
+            return "InputAgent"  # Fallback
+
+    def _build_routing_prompt(self, api_payload: Dict[str, Any], context_text: str) -> str:
+        """Build the RAG-informed prompt for agent routing."""
         method = api_payload.get('method', 'GET')
         endpoint = api_payload.get('endpoint', '/')
         payload = api_payload.get('payload', {})
         headers = api_payload.get('headers', {})
-        
-        prompt = f"""You are a cybersecurity expert analyzing API requests. Based on the API request details below, determine which security agent should analyze it.
 
-API Request Details:
-- Method: {method}
-- Endpoint: {endpoint}
-- Payload: {payload}
-- Headers: {headers}
+        prompt = f"""You are a cybersecurity routing model with domain-specific knowledge.
+
+Below are API request details and relevant security knowledge retrieved from the RAG system.
+
+=== API Request ===
+Method: {method}
+Endpoint: {endpoint}
+Payload: {payload}
+Headers: {headers}
+
+=== Retrieved Security Knowledge (RAG Context) ===
+{context_text}
 
 Available Agents:
 - InputAgent: Handles input validation (SQL injection, XSS, path traversal)
@@ -114,39 +171,30 @@ Available Agents:
 - RateAgent: Handles rate limiting and DoS vulnerabilities
 - DocAccuracyAgent: Handles API documentation accuracy
 
-Analyze the request and determine which agent is most appropriate. Consider:
-- Suspicious input patterns in payload or parameters
-- Authentication/authorization headers
-- Request frequency patterns
-- Endpoint documentation status
+Analyze the API request in light of the retrieved security knowledge and determine which agent should analyze it.
 
-Important: The last line of your response must contain ONLY the agent name with no additional text.
+The final line of your response must contain ONLY the agent name.
 
 Agent:"""
-        
         return prompt
-    
+
     def _extract_agent_name(self, response: str) -> str:
         """Extract agent name from LLM response."""
-        # Get last line
         lines = response.strip().split('\n')
         last_line = lines[-1].strip()
-        
-        # Valid agent names
+
         valid_agents = [
-            "InputAgent", "AuthAgent", "AccessAgent", 
+            "InputAgent", "AuthAgent", "AccessAgent",
             "RateAgent", "DocAccuracyAgent"
         ]
-        
-        # Check if last line contains a valid agent name
+
         for agent in valid_agents:
             if agent in last_line:
                 return agent
-        
-        # Fallback: search entire response
+
         for agent in valid_agents:
             if agent in response:
                 return agent
-        
+
         logger.warning(f"Could not extract agent from LLM response: {last_line}")
-        return "InputAgent"  # Default
+        return "InputAgent"
