@@ -3,7 +3,9 @@
 AuthAgent - API Authentication Security Agent
 Part of the API Security Intelligence Framework for Continuous API Vulnerability Assessment
 """
-
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 import requests
 import json
 import jwt

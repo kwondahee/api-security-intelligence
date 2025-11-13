@@ -3,6 +3,9 @@ Rate Limiting Detection Agent - Optimized Version (Fixed)
 Tests for missing or inadequate rate limiting controls.
 """
 
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 import logging
 import time
 import requests
@@ -12,6 +15,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from urllib.parse import urljoin
 from telemetry.logger import emit_agent_decision
+
 
 logger = logging.getLogger(__name__)
 

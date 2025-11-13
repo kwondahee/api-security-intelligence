@@ -2,6 +2,9 @@
 
 import requests
 import json
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from dataclasses import dataclass, asdict
 from typing import Dict, Any, List, Optional
 from urllib.parse import urljoin, urlencode

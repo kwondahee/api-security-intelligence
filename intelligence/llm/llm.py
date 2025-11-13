@@ -6,7 +6,12 @@ import logging
 import torch
 import time
 from typing import Dict, Any
+import sys
+import os
+
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
 
 from llm.rag import RAGSystem
 from telemetry.logger import emit_agent_decision  # ✅ use your existing JSONL logger

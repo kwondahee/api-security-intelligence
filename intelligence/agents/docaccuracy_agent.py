@@ -6,7 +6,9 @@ This agent analyzes API documentation accuracy by comparing documented behavior
 with actual API responses. It can work with various documentation formats
 including OpenAPI/Swagger specs, and provides detailed accuracy reports.
 """
-
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 import requests
 import json
 import re
