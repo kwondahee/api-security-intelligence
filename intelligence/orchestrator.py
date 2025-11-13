@@ -3,6 +3,9 @@
 Orchestrator: RAG + LLM + Agents Controller
 Coordinates the full security intelligence pipeline.
 """
+# # input from dissector
+# from dissector.interface import get_latest_findings
+# apis = get_latest_findings()
 
 import logging
 import time
