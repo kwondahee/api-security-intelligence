@@ -1,0 +1,22 @@
+[
+  {
+    "query": "SQL injection prevention",
+    "expected_sources": ["OWASP_SQL_Injection_Prevention"]
+  },
+  {
+    "query": "cross-site scripting",
+    "expected_sources": ["OWASP_XSS_Prevention"]
+  },
+  {
+    "query": "authorization vulnerability",
+    "expected_sources": ["OWASP_API_Security_BOLA", "OWASP_API_Security_BFLA"]
+  },
+  {
+    "query": "rate limiting best practices",
+    "expected_sources": ["API_Rate_Limiting_Guide"]
+  },
+  {
+    "query": "multi-tenancy isolation",
+    "expected_sources": ["Multi_Tenancy_Security_Guide"]
+  }
+]
