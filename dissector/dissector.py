@@ -82,6 +82,14 @@ def dissect_http(pcap_file, limit=10):
     return insights
 
 if __name__ == "__main__":
-    file_path = "test.pcap"  # replace with your test file
-    results = dissect_http(file_path, limit=5)
+    import sys
+
+    if len(sys.argv) < 2:
+        print("Usage: python dissector.py <pcap_file> [limit]", file=sys.stderr)
+        sys.exit(1)
+
+    pcap_path = sys.argv[1]
+    limit = int(sys.argv[2]) if len(sys.argv) > 2 else 0  # 0 or no arg = use default
+
+    results = dissect_http(pcap_path, limit=limit)
     print(json.dumps(results, indent=2))

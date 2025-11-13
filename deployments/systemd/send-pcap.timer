@@ -1,0 +1,10 @@
+[Unit]
+Description=Run send-pcap.service every 30 seconds
+
+[Timer]
+OnBootSec=20s
+OnUnitActiveSec=30s
+Unit=send-pcap.service
+
+[Install]
+WantedBy=timers.target

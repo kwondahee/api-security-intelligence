@@ -1,0 +1,10 @@
+[Unit]
+Description=AETHER send PCAPs to Dissector VM
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/local/bin/send_pcap_to_dissector.sh

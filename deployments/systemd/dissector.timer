@@ -1,0 +1,10 @@
+[Unit]
+Description=Run AETHER Dissector every 30 seconds
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=30s
+Unit=dissector.service
+
+[Install]
+WantedBy=timers.target
