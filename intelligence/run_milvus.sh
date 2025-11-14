@@ -11,6 +11,18 @@ echo "[MILVUS] Starting Milvus via Docker Compose"
 echo "Directory: $SCRIPT_DIR"
 echo "====================================================="
 
+# ---------------------------------------------------------
+# [1] Setup Python venv
+# ---------------------------------------------------------
+if [ ! -d "venv" ]; then
+  echo "[MILVUS] Creating Python virtual environment..."
+  python3 -m venv venv
+fi
+
+echo "[MILVUS] Activating venv..."
+source venv/bin/activate
+
+
 # --- [1] Ensure Docker is running ---
 if ! systemctl is-active --quiet docker; then
   echo "[MILVUS] Docker is not running → starting Docker..."
