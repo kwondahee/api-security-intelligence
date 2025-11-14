@@ -27,18 +27,18 @@ fi
 echo "[INIT] Activating venv..."
 source venv/bin/activate || { echo "[ERROR] Failed to activate venv"; exit 1; }
 
-# ---------------------------------------------------------
-# [3] Install dependencies
-# ---------------------------------------------------------
-if [ -f "requirements.txt" ]; then
-  echo "[INIT] Installing Python dependencies..."
-  pip install --upgrade pip
-  pip install -r requirements.txt || {
-    echo "[ERROR] Failed to install dependencies"; exit 1;
-  }
-else
-  echo "[WARN] requirements.txt not found — skipping install."
-fi
+# # ---------------------------------------------------------
+# # [3] Install dependencies
+# # ---------------------------------------------------------
+# if [ -f "requirements.txt" ]; then
+#   echo "[INIT] Installing Python dependencies..."
+#   pip install --upgrade pip
+#   pip install -r requirements.txt || {
+#     echo "[ERROR] Failed to install dependencies"; exit 1;
+#   }
+# else
+#   echo "[WARN] requirements.txt not found — skipping install."
+# fi
 
 # ---------------------------------------------------------
 # [4] Ensure Qdrant is running
