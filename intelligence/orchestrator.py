@@ -60,146 +60,42 @@ def wait_for_qdrant(url="http://localhost:6333/healthz", retries=30, delay=2):
 # ============================================================
 
 STATIC_APIS = [
-    # --- Existing ones ---
-    {
-        "method": "GET",
-        "endpoint": "http://localhost:5001/openapi.json",
-        "payload": {},
-        "headers": {}
-    },
-    {
-        "method": "GET",
-        "endpoint": "http://localhost:5001/books/v1/search?book_title=Python",
-        "payload": {},
-        "headers": {}
-    },
-    {
-        "method": "GET",
-        "endpoint": "http://localhost:5001/books/v1/search?book_title=' OR 1=1 --",
-        "payload": {},
-        "headers": {}
-    },
-    {
-        "method": "GET",
-        "endpoint": "http://localhost:5001/users/v1/profile/1",
-        "payload": {},
-        "headers": {}
-    },
-    {
-        "method": "GET",
-        "endpoint": "http://localhost:5001/users/v1/profile/2",
-        "payload": {},
-        "headers": {}
-    },
-    {
-        "method": "GET",
-        "endpoint": "http://localhost:5001/admin/users",
-        "payload": {},
-        "headers": {}
-    },
-    {
-        "method": "GET",
-        "endpoint": "http://localhost:5001/api/users/v1",
-        "payload": {},
-        "headers": {}
-    },
-    {
-        "method": "GET",
-        "endpoint": "http://localhost:5001/api/internal/debug",
-        "payload": {},
-        "headers": {}
-    },
+    # --- DocAccuracyAgent ---
+    {"method": "GET", "endpoint": "http://localhost:5001/openapi.json", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/api/users/v1", "payload": {}, "headers": {}},
 
-    # --- NEW: Auth / login tests ---
-    {
-        "method": "POST",
-        "endpoint": "http://localhost:5001/api/v1/login",
+    # --- InputAgent ---
+    {"method": "GET", "endpoint": "http://localhost:5001/books/v1/search?book_title=Python", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/books/v1/search?book_title=' OR 1=1 --", "payload": {}, "headers": {}},
+    {"method": "POST", "endpoint": "http://localhost:5001/payments/v1/charge",
+        "payload": {"card_number": "4111111111111111", "cvv": "123", "amount": 99.99},
+        "headers": {"Content-Type": "application/json"}},
+    {"method": "GET", "endpoint": "http://localhost:5001/search/v1/ssrf?url=http://localhost:5001/", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/files/v1/download?path=logs/app.log", "payload": {}, "headers": {}},
+
+    # --- AuthAgent ---
+    {"method": "POST", "endpoint": "http://localhost:5001/api/v1/login",
         "payload": {"username": "admin", "password": "password123"},
-        "headers": {"Content-Type": "application/json"}
-    },
-    {
-        "method": "POST",
-        "endpoint": "http://localhost:5001/api/v1/login",
-        "payload": {"username": "nonexistent", "password": "anything"},
-        "headers": {"Content-Type": "application/json"}
-    },
+        "headers": {"Content-Type": "application/json"}},
+    {"method": "POST", "endpoint": "http://localhost:5001/api/v1/login",
+        "payload": {"username": "nonexistent", "password": "wrong"},
+        "headers": {"Content-Type": "application/json"}},
+    {"method": "GET", "endpoint": "http://localhost:5001/admin/users", "payload": {}, "headers": {}},
 
-    # --- NEW: Payment endpoint (sensitive data handling, missing auth) ---
-    {
-        "method": "POST",
-        "endpoint": "http://localhost:5001/payments/v1/charge",
-        "payload": {
-            "card_number": "4111111111111111",
-            "cvv": "123",
-            "amount": 99.99
-        },
-        "headers": {"Content-Type": "application/json"}
-    },
+    # --- AccessAgent ---
+    {"method": "GET", "endpoint": "http://localhost:5001/users/v1/profile/1", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/users/v1/profile/2", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/inventory/v1/item/1", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/inventory/v1/item/2", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/inventory/v1/item/999", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/files/v1/download?path=../../etc/passwd", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/admin/config", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/debug/env", "payload": {}, "headers": {}},
 
-    # --- NEW: File download with path traversal ---
-    {
-        "method": "GET",
-        "endpoint": "http://localhost:5001/files/v1/download?path=../../etc/passwd",
-        "payload": {},
-        "headers": {}
-    },
-    {
-        "method": "GET",
-        "endpoint": "http://localhost:5001/files/v1/download?path=logs/app.log",
-        "payload": {},
-        "headers": {}
-    },
-
-    # --- NEW: Inventory IDOR/BOLA ---
-    {
-        "method": "GET",
-        "endpoint": "http://localhost:5001/inventory/v1/item/1",
-        "payload": {},
-        "headers": {}
-    },
-    {
-        "method": "GET",
-        "endpoint": "http://localhost:5001/inventory/v1/item/2",
-        "payload": {},
-        "headers": {}
-    },
-    {
-        "method": "GET",
-        "endpoint": "http://localhost:5001/inventory/v1/item/999",
-        "payload": {},
-        "headers": {}
-    },
-
-    # --- NEW: SSRF-like endpoint ---
-    {
-        "method": "GET",
-        "endpoint": "http://localhost:5001/search/v1/ssrf?url=http://localhost:5001/",
-        "payload": {},
-        "headers": {}
-    },
-
-    # --- NEW: Sensitive config + env leaks ---
-    {
-        "method": "GET",
-        "endpoint": "http://localhost:5001/admin/config",
-        "payload": {},
-        "headers": {}
-    },
-    {
-        "method": "GET",
-        "endpoint": "http://localhost:5001/debug/env",
-        "payload": {},
-        "headers": {}
-    },
-
-    # --- NEW: Rate limit test endpoint ---
-    {
-        "method": "GET",
-        "endpoint": "http://localhost:5001/rate/v1/test",
-        "payload": {},
-        "headers": {}
-    }
+    # --- RateAgent ---
+    {"method": "GET", "endpoint": "http://localhost:5001/rate/v1/test", "payload": {}, "headers": {}}
 ]
+
 
 
 # ============================================================

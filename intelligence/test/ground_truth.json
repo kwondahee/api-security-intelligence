@@ -1,0 +1,25 @@
+[
+    {"endpoint": "http://localhost:5001/openapi.json", "true": "DocAccuracyAgent", "pred": "UNKNOWN"},
+    {"endpoint": "http://localhost:5001/api/users/v1", "true": "DocAccuracyAgent", "pred": "UNKNOWN"},
+
+    {"endpoint": "http://localhost:5001/books/v1/search?book_title=Python", "true": "InputAgent", "pred": "UNKNOWN"},
+    {"endpoint": "http://localhost:5001/books/v1/search?book_title=' OR 1=1 --", "true": "InputAgent", "pred": "UNKNOWN"},
+    {"endpoint": "http://localhost:5001/payments/v1/charge", "true": "InputAgent", "pred": "UNKNOWN"},
+    {"endpoint": "http://localhost:5001/search/v1/ssrf?url=http://localhost:5001/", "true": "InputAgent", "pred": "UNKNOWN"},
+    {"endpoint": "http://localhost:5001/files/v1/download?path=logs/app.log", "true": "InputAgent", "pred": "UNKNOWN"},
+
+    {"endpoint": "http://localhost:5001/api/v1/login", "true": "AuthAgent", "pred": "UNKNOWN"},
+    {"endpoint": "http://localhost:5001/api/v1/login", "true": "AuthAgent", "pred": "UNKNOWN"},
+    {"endpoint": "http://localhost:5001/admin/users", "true": "AuthAgent", "pred": "UNKNOWN"},
+
+    {"endpoint": "http://localhost:5001/users/v1/profile/1", "true": "AccessAgent", "pred": "UNKNOWN"},
+    {"endpoint": "http://localhost:5001/users/v1/profile/2", "true": "AccessAgent", "pred": "UNKNOWN"},
+    {"endpoint": "http://localhost:5001/inventory/v1/item/1", "true": "AccessAgent", "pred": "UNKNOWN"},
+    {"endpoint": "http://localhost:5001/inventory/v1/item/2", "true": "AccessAgent", "pred": "UNKNOWN"},
+    {"endpoint": "http://localhost:5001/inventory/v1/item/999", "true": "AccessAgent", "pred": "UNKNOWN"},
+    {"endpoint": "http://localhost:5001/files/v1/download?path=../../etc/passwd", "true": "AccessAgent", "pred": "UNKNOWN"},
+    {"endpoint": "http://localhost:5001/admin/config", "true": "AccessAgent", "pred": "UNKNOWN"},
+    {"endpoint": "http://localhost:5001/debug/env", "true": "AccessAgent", "pred": "UNKNOWN"},
+
+    {"endpoint": "http://localhost:5001/rate/v1/test", "true": "RateAgent", "pred": "UNKNOWN"}
+]
