@@ -228,3 +228,25 @@ class RAGSystem:
         if documents:
             self.add_documents(documents, skip_cache_invalidation=True)
             logger.info(f"[RAG] Indexed {len(documents)} agent files.")
+
+    def get_cache_stats(self):
+        """
+        Returns simple cache statistics for debugging KB initialization.
+        This prevents initialize_kb.py from crashing if cache methods
+        are not fully implemented.
+        """
+        stats = {}
+
+        # Check if cache exists
+        if hasattr(self, "cache") and isinstance(self.cache, dict):
+            stats["cache_enabled"] = True
+            stats["cache_entries"] = len(self.cache)
+        else:
+            stats["cache_enabled"] = False
+            stats["cache_entries"] = 0
+
+        # Optional: KB version tracking
+        if hasattr(self, "kb_version"):
+            stats["kb_version"] = self.kb_version
+
+        return stats
