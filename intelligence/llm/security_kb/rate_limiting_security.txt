@@ -1,0 +1,24 @@
+Rate Limiting Security Principles
+
+1. Without rate limits, APIs are vulnerable to:
+   - Credential stuffing
+   - DoS attacks
+   - Enumeration
+   - Brute-force attacks
+
+2. Effective rate limit mechanisms include:
+   - Per-user limits
+   - Per-IP limits
+   - Burst windows
+   - Sliding windows
+   - API key quotas
+
+3. Indicators of Weak Rate Limiting:
+   - No 429 responses
+   - Same response time regardless of frequency
+   - No Retry-After headers
+
+4. Automated Testing Strategy:
+   - Send rapid sequential requests
+   - Monitor for throttling headers
+   - Compare high/low privilege behavior

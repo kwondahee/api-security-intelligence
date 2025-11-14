@@ -1,0 +1,24 @@
+JWT Attack Vectors and Defensive Mechanisms
+
+1. Algorithm Confusion Attack
+   - Accepting `alg=none`
+   - Accepting tokens signed with attacker-chosen algorithms
+
+2. Token Replay Attacks
+   - No rotation or session tracking
+   - Reuse same JWT for new sessions
+
+3. Kid Header Exploits
+   - Attacker manipulates 'kid' to reference a public key or file on server
+
+4. Expired Tokens Accepted
+   - Missing 'exp' check
+   - Overly long token lifetimes
+
+5. Weak Signing Keys
+   - Predictable or short secret keys (HS256)
+
+Validation Steps:
+- Always enforce signature checking
+- Verify issuer, audience
+- Enforce expiration and rotation
