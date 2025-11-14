@@ -1,12 +1,12 @@
 [Unit]
-Description=Milvus Vector Database
+Description=Qdrant Vector Database
 After=docker.service network.target
 Requires=docker.service
 
 [Service]
 Type=simple
 WorkingDirectory=/home/ubuntu/api-security-intelligence/intelligence
-ExecStart=/bin/bash /home/ubuntu/api-security-intelligence/intelligence/run_milvus.sh
+ExecStart=/bin/bash /home/ubuntu/api-security-intelligence/intelligence/run_qdrant.sh
 Restart=always
 User=root
 
