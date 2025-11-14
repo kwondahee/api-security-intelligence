@@ -1,17 +1,14 @@
 [Unit]
-Description=Aether Intelligence Orchestrator
+Description=Aether Intelligence Framework
 After=milvus.service
 Requires=milvus.service
 
 [Service]
 Type=simple
 WorkingDirectory=/home/ubuntu/api-security-intelligence/intelligence
-ExecStart=/home/ubuntu/api-security-intelligence/intelligence/run_intelligence.sh
-Restart=on-failure
+ExecStart=/bin/bash /home/ubuntu/api-security-intelligence/intelligence/run_intelligence.sh
+Restart=always
 User=ubuntu
-Environment=PYTHONUNBUFFERED=1
-TimeoutStartSec=90
-TimeoutStopSec=30
 
 [Install]
 WantedBy=multi-user.target
