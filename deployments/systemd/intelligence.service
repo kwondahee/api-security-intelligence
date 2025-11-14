@@ -1,7 +1,7 @@
 [Unit]
 Description=Aether Intelligence Framework
-After=milvus.service
-Requires=milvus.service
+After=qdrant.service
+Requires=qdrant.service
 
 [Service]
 Type=simple
