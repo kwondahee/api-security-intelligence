@@ -43,15 +43,18 @@ source venv/bin/activate || { echo "[ERROR] Failed to activate venv"; exit 1; }
 # ---------------------------------------------------------
 # [4] Ensure Qdrant is running
 # ---------------------------------------------------------
-echo "[CHECK] Checking if Qdrant is reachable at http://localhost:6333 ..."
-if curl -s http://localhost:6333/health | grep -q '"status":"ok"'; then
+echo "[CHECK] Checking if Qdrant is reachable at http://localhost:6333/healthz ..."
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:6333/healthz)
+
+if [ "$STATUS" = "200" ]; then
   echo "[CHECK] Qdrant is running ✔"
 else
   echo "[ERROR] Qdrant is NOT running!"
   echo "Start it manually:"
-  echo "    docker run -p 6333:6333 -p 6334:6334 qdrant/qdrant"
+  echo "    docker compose up -d"
   exit 1
 fi
+
 
 # ---------------------------------------------------------
 # [5] Initialize Knowledge Base (only once)
