@@ -67,8 +67,8 @@ else
   echo "[INIT] KB already initialized — skipping ✔"
 fi
 
-# ---------------------------------------------------------
-# [6] Start Intelligence Orchestrator
-# ---------------------------------------------------------
-echo "[RUN] Launching Intelligence Orchestrator..."
-exec python3 orchestrator.py
+# # ---------------------------------------------------------
+# # [6] Start Intelligence Orchestrator
+# # ---------------------------------------------------------
+# echo "[RUN] Launching Intelligence Orchestrator..."
+# exec python3 orchestrator.py
