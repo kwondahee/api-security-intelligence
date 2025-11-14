@@ -8,7 +8,7 @@ Type=simple
 WorkingDirectory=/home/ubuntu/api-security-intelligence/intelligence
 ExecStart=/bin/bash /home/ubuntu/api-security-intelligence/intelligence/run_milvus.sh
 Restart=always
-User=ubuntu
+User=root
 
 [Install]
 WantedBy=multi-user.target
