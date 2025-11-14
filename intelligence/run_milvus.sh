@@ -23,27 +23,27 @@ echo "[MILVUS] Activating venv..."
 source venv/bin/activate
 
 
-# --- [1] Ensure Docker is running ---
+# --- [2] Ensure Docker is running ---
 if ! systemctl is-active --quiet docker; then
   echo "[MILVUS] Docker is not running → starting Docker..."
-  sudo systemctl start docker
+  systemctl start docker
 fi
 
 echo "[MILVUS] Docker is running ✔"
 
 
-# --- [2] Ensure docker-compose.yml exists ---
+# --- [3] Ensure docker-compose.yml exists ---
 if [ ! -f "docker-compose.yml" ]; then
   echo "[ERROR] docker-compose.yml not found in: $SCRIPT_DIR"
   exit 1
 fi
 
-# --- [3] Start Milvus with docker compose ---
+# --- [4] Start Milvus with Docker Compose ---
 echo "[MILVUS] Launching Milvus containers..."
-sudo docker compose up -d
+docker compose up -d
 
 
-# --- [4] Wait for Milvus to become healthy ---
+# --- [5] Wait for Milvus to become healthy ---
 echo "[MILVUS] Waiting for Milvus to be ready..."
 
 RETRIES=20
@@ -54,7 +54,7 @@ for i in $(seq 1 $RETRIES); do
     echo "[MILVUS] Milvus is healthy ✔"
     exit 0
   fi
-  
+
   echo "[MILVUS] Milvus not ready yet ($i/$RETRIES)... retrying in $SLEEP seconds"
   sleep $SLEEP
 done
