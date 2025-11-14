@@ -26,6 +26,6 @@ if [ ! -f "kb_initialized.flag" ]; then
   touch kb_initialized.flag
 fi
 
-# --- [5] Start the orchestrator ---
-echo "[RUN] Starting Aether Intelligence Orchestrator..."
-exec python3 orchestrator.py
+# # --- [5] Start the orchestrator ---
+# echo "[RUN] Starting Aether Intelligence Orchestrator..."
+# exec python3 orchestrator.py
