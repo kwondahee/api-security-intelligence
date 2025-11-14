@@ -12,7 +12,7 @@ echo "Directory: $SCRIPT_DIR"
 echo "====================================================="
 
 # ---------------------------------------------------------
-# [0] Setup Python venv (used by any Milvus Python tools)
+# [0] Setup Python venv (optional but recommended)
 # ---------------------------------------------------------
 if [ ! -d "venv" ]; then
   echo "[MILVUS] Creating Python virtual environment..."
@@ -20,7 +20,6 @@ if [ ! -d "venv" ]; then
 fi
 
 echo "[MILVUS] Activating venv..."
-# if python packages ever needed later for sanity checks
 source venv/bin/activate
 
 # ---------------------------------------------------------
@@ -48,7 +47,8 @@ echo "[MILVUS] Launching Milvus containers..."
 docker compose up -d
 
 # ---------------------------------------------------------
-# [4] Wait for Milvus to become healthy (correct 2.x endpoint)
+# [4] Wait for Milvus to become healthy
+# (your docker-compose exposes health at 9091/healthz)
 # ---------------------------------------------------------
 echo "[MILVUS] Waiting for Milvus to become healthy..."
 
@@ -56,11 +56,11 @@ RETRIES=40      # ~120 seconds total
 SLEEP=3
 
 for i in $(seq 1 $RETRIES); do
-  HEALTH=$(curl -s http://localhost:19530/health || true)
+  HEALTH=$(curl -s http://localhost:9091/healthz || true)
 
   # Expected: {"status":"healthy"}
   if echo "$HEALTH" | grep -q '"status":"healthy"'; then
-    echo "[MILVUS] Milvus is healthy ✔"
+    echo "[MILVUS] Milvus is fully healthy ✔"
     exit 0
   fi
 
