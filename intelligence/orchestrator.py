@@ -3,12 +3,12 @@
 Orchestrator: RAG + LLM + Agents Controller
 Coordinates the full security intelligence pipeline.
 """
-# # input from dissector
-# from dissector.interface import get_latest_findings
-# apis = get_latest_findings()
 
 import logging
 import time
+import os
+import json
+import glob
 from urllib.parse import urlparse
 
 from llm.rag import RAGSystem
@@ -25,6 +25,24 @@ from agents.docaccuracy_agent import DocAccuracyAgent
 
 logging.basicConfig(level=logging.INFO, format="%(name)s: %(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
+
+# ============================================================
+# Load dissector output JSON
+# ============================================================
+
+def load_latest_dissector_file(folder="/home/ubuntu/llmjson"):
+    """Find and load the latest API traffic JSON file from the dissector."""
+    pattern = os.path.join(folder, "api_traffic.pcap*.json")
+    files = glob.glob(pattern)
+
+    if not files:
+        raise FileNotFoundError(f"❌ No dissector JSON files found in: {folder}")
+
+    latest_file = max(files, key=os.path.getmtime)
+    print(f"[INFO] Loading dissector output from: {latest_file}")
+
+    with open(latest_file, "r") as f:
+        return json.load(f)
 
 
 # ============================================================
@@ -45,15 +63,10 @@ def main():
     llm = FoundationSecLLM()
     logger.info("LLM initialized successfully")
 
-    # 2️⃣ Define the test API endpoints
-    apis = [
-        {"method": "GET", "endpoint": "http://localhost:5001/books/v1/search", "payload": {"book_title": "test"}},     # normal search
-        {"method": "GET", "endpoint": "http://localhost:5001/books/v1/search", "payload": {"book_title": "' OR 1=1 --"}},  # SQLi test
-        {"method": "GET", "endpoint": "/users/v1/profile/1", "payload": {}},     # BOLA
-        {"method": "GET", "endpoint": "/admin/users", "payload": {}},            # Missing auth
-        {"method": "GET", "endpoint": "/api/internal/debug", "payload": {}},     # Undocumented endpoint
-        {"method": "GET", "endpoint": "/rate_limit_test", "payload": {}},        # Rate limiting test
-    ]
+    # 2️⃣ Load API traffic from dissector
+    print("\n[INFO] Loading API traffic from dissector...")
+    apis = load_latest_dissector_file("/home/ubuntu/llmjson")
+    logger.info(f"Loaded {len(apis)} API records from dissector")
 
     # 3️⃣ Iterate through APIs and run full analysis
     for api in apis:
@@ -94,7 +107,7 @@ def run_llm_routing(llm, api_payload):
         logger.info(f"Routing API {prompt_info['endpoint']} via LLM...")
         agent_name = llm.route_to_agent(api_payload)
 
-        # ✅ Log LLM reasoning with automatic trace_id
+        # Log LLM reasoning with trace_id
         trace_id = emit_agent_decision(
             trace_id=None,
             endpoint=prompt_info["endpoint"],
