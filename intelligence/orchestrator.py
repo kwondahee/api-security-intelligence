@@ -1,7 +1,230 @@
+# #!/usr/bin/env python3
+# """
+# Orchestrator: RAG + LLM + Agents Controller
+# Coordinates the full API Security Intelligence pipeline.
+# Now Qdrant-based (no Milvus).
+# """
+
+# import logging
+# import time
+# import os
+# import json
+# import glob
+# import requests
+
+# from llm.rag import RAGSystem             # Qdrant RAG
+# from llm.llm import FoundationSecLLM
+# from telemetry.logger import emit_agent_decision
+
+# # === Agents ===
+# from agents.input_agent import InputAgent
+# from agents.auth_agent import AuthAgent
+# from agents.access_agent import AccessAgent
+# from agents.rate_agent import RateAgent
+# from agents.docaccuracy_agent import DocAccuracyAgent
+
+
+# logging.basicConfig(level=logging.INFO, format="%(name)s: %(levelname)s: %(message)s")
+# logger = logging.getLogger("orchestrator")
+
+
+# # ============================================================
+# # QDRANT HEALTH CHECK
+# # ============================================================
+
+# def wait_for_qdrant(url="http://localhost:6333/health", retries=30, delay=2):
+#     """Ensure Qdrant is running before starting orchestration."""
+#     for i in range(retries):
+#         try:
+#             res = requests.get(url, timeout=2)
+#             if res.status_code == 200 and '"status":"ok"' in res.text:
+#                 logger.info("Qdrant is healthy ✔")
+#                 return True
+#         except Exception:
+#             pass
+
+#         logger.warning(f"Qdrant not ready yet ({i+1}/{retries})... waiting {delay}s")
+#         time.sleep(delay)
+#     raise RuntimeError("❌ Qdrant did not become healthy. Cannot start orchestrator.")
+
+
+# # ============================================================
+# # Load dissector output JSON
+# # ============================================================
+
+# def load_latest_dissector_file(folder="/home/ubuntu/llmjson"):
+#     """Find and load the latest API traffic JSON file from the dissector."""
+#     pattern = os.path.join(folder, "api_traffic.pcap*.json")
+#     files = glob.glob(pattern)
+
+#     if not files:
+#         raise FileNotFoundError(f"No dissector JSON files found in: {folder}")
+
+#     latest_file = max(files, key=os.path.getmtime)
+#     logger.info(f"Loading dissector output from: {latest_file}")
+
+#     with open(latest_file, "r") as f:
+#         return json.load(f)
+
+
+# # ============================================================
+# # Main orchestrator
+# # ============================================================
+
+# def main():
+#     print("\n======================================================================")
+#     print("[ORCHESTRATOR] Starting API Security Intelligence Framework")
+#     print("======================================================================")
+
+#     # 1️⃣ Ensure Qdrant is alive
+#     logger.info("Checking Qdrant health...")
+#     wait_for_qdrant()
+
+#     # 2️⃣ Initialize RAG + LLM
+#     logger.info("Initializing Qdrant-based RAG System...")
+#     rag = RAGSystem()
+#     logger.info("RAG System is ready ✔")
+
+#     logger.info("Initializing Foundation-Sec-8B LLM...")
+#     llm = FoundationSecLLM()
+#     logger.info("LLM initialized ✔")
+
+#     # 3️⃣ Load API traffic
+#     logger.info("Loading API traffic from dissector...")
+#     try:
+#         apis = load_latest_dissector_file("/home/ubuntu/llmjson")
+#     except Exception as e:
+#         logger.error(f"Failed to load dissector output: {e}")
+#         return
+
+#     if not apis or len(apis) == 0:
+#         logger.warning("No API entries found — nothing to analyze.")
+#         return
+
+#     logger.info(f"Loaded {len(apis)} API records from dissector.")
+
+#     # 4️⃣ Analyze each API
+#     for api in apis:
+#         print("\n--------------------------------------------------------------")
+#         print(f"[ANALYZING] {api.get('method')} {api.get('endpoint')}")
+
+#         # 4.1 LLM routing
+#         agent_name, trace_id = run_llm_routing(llm, api)
+
+#         # 4.2 RAG contextual reasoning
+#         rag.retrieve(
+#             agent_name=agent_name,
+#             finding={"endpoint": api.get("endpoint"), "trace_id": trace_id},
+#             top_k=5
+#         )
+
+#         # 4.3 Run agent
+#         run_agent(agent_name, api, trace_id)
+
+#     print("\n======================================================================")
+#     print("[SUCCESS] Security intelligence pipeline complete.")
+#     print("Check intelligence/log/agents.jsonl for full reasoning traces.")
+#     print("======================================================================")
+
+
+# # ============================================================
+# # Helper functions
+# # ============================================================
+
+# def run_llm_routing(llm, api_payload):
+#     """Run LLM routing and log reasoning with a trace_id."""
+#     try:
+#         prompt_info = {
+#             "method": api_payload.get("method"),
+#             "endpoint": api_payload.get("endpoint"),
+#             "payload": api_payload.get("payload", {})
+#         }
+
+#         logger.info(f"Routing API {prompt_info['endpoint']} via LLM...")
+#         agent_name = llm.route_to_agent(api_payload)
+
+#         # Emit LLM routing reasoning
+#         trace_id = emit_agent_decision(
+#             trace_id=None,
+#             endpoint=prompt_info["endpoint"],
+#             agent=agent_name,
+#             rule=None,
+#             status="INFO",
+#             extra={"llm_reasoning": {"routed_agent": agent_name, "api": prompt_info}}
+#         )
+
+#         logger.info(f"LLM routed to {agent_name} (trace_id={trace_id})")
+#         return agent_name, trace_id
+
+#     except Exception as e:
+#         logger.error(f"LLM routing failed: {e}")
+#         fallback_agent = "InputAgent"
+#         trace_id = emit_agent_decision(
+#             trace_id=None,
+#             endpoint=api_payload.get("endpoint", "unknown"),
+#             agent=fallback_agent,
+#             rule="LLM-RoutingError",
+#             status="ERROR",
+#             extra={"exception": str(e)}
+#         )
+#         return fallback_agent, trace_id
+
+
+# def get_base_url(endpoint: str) -> str:
+#     """Extract the base URL from an endpoint."""
+#     from urllib.parse import urlparse
+#     parsed = urlparse(endpoint)
+#     if parsed.scheme and parsed.netloc:
+#         return f"{parsed.scheme}://{parsed.netloc}"
+#     return "http://localhost:5001"
+
+
+# def run_agent(agent_name, api_payload, trace_id):
+#     """Run the actual security agent and link logs via trace_id."""
+#     endpoint = api_payload.get("endpoint", "unknown")
+#     base_url = get_base_url(endpoint)
+
+#     agents = {
+#         "InputAgent": lambda: InputAgent().analyze(api_payload, trace_id),
+#         "AuthAgent": lambda: AuthAgent(base_url).analyze(api_payload, trace_id),
+#         "AccessAgent": lambda: AccessAgent(base_url).analyze(api_payload, trace_id),
+#         "RateAgent": lambda: RateAgent(base_url).analyze(api_payload, trace_id),
+#         "DocAccuracyAgent": lambda: DocAccuracyAgent(base_url).analyze(api_payload, trace_id),
+#     }
+
+#     try:
+#         if agent_name in agents:
+#             agents[agent_name]()
+#         else:
+#             logger.warning(f"Unknown agent '{agent_name}', skipping.")
+
+#         logger.info(f"[{agent_name}] Analysis complete (trace_id={trace_id})")
+
+#     except Exception as e:
+#         logger.error(f"[{agent_name}] failed: {e}")
+#         emit_agent_decision(
+#             trace_id=trace_id,
+#             endpoint=endpoint,
+#             agent=agent_name,
+#             rule="AgentError",
+#             status="ERROR",
+#             extra={"exception": str(e)}
+#         )
+
+
+# # ============================================================
+# # Entry Point
+# # ============================================================
+
+# if __name__ == "__main__":
+#     main()
+
+
 #!/usr/bin/env python3
 """
 Orchestrator: RAG + LLM + Agents Controller
-Coordinates the full security intelligence pipeline.
+Coordinates the full API Security Intelligence pipeline.
+Now Qdrant-based (no Milvus).
 """
 
 import logging
@@ -9,13 +232,13 @@ import time
 import os
 import json
 import glob
-from urllib.parse import urlparse
+import requests
 
-from llm.rag import RAGSystem
+from llm.rag import RAGSystem             # Qdrant RAG
 from llm.llm import FoundationSecLLM
-from telemetry.logger import emit_agent_decision  # adjust import path if needed
+from telemetry.logger import emit_agent_decision
 
-# === Agent imports ===
+# === Agents ===
 from agents.input_agent import InputAgent
 from agents.auth_agent import AuthAgent
 from agents.access_agent import AccessAgent
@@ -24,7 +247,94 @@ from agents.docaccuracy_agent import DocAccuracyAgent
 
 
 logging.basicConfig(level=logging.INFO, format="%(name)s: %(levelname)s: %(message)s")
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("orchestrator")
+
+
+# ============================================================
+# QDRANT HEALTH CHECK
+# ============================================================
+
+def wait_for_qdrant(url="http://localhost:6333/healthz", retries=30, delay=2):
+    print(f"➡️  Checking Qdrant using URL: {url}")
+
+    for i in range(retries):
+        try:
+            res = requests.get(url, timeout=2)
+            print("Status:", res.status_code, "Body:", res.text)
+
+            # Qdrant returns status 200 with "healthz check passed"
+            if res.status_code == 200:
+                logger.info("Qdrant is healthy ✔")
+                return True
+
+        except Exception as e:
+            print("EXCEPTION:", e)
+
+        logger.warning(f"Qdrant not ready yet ({i+1}/{retries})... waiting {delay}s")
+        time.sleep(delay)
+
+    raise RuntimeError("❌ Qdrant did not become healthy. Cannot start orchestrator.")
+
+
+
+
+
+# ============================================================
+# STATIC TEST API PAYLOADS (LOCAL DEVELOPMENT)
+# Matches mock_api.py exactly
+# ============================================================
+
+STATIC_APIS = [
+    {
+        "method": "GET",
+        "endpoint": "http://localhost:5001/openapi.json",
+        "payload": {},
+        "headers": {}
+    },
+    {
+        "method": "GET",
+        "endpoint": "http://localhost:5001/books/v1/search?book_title=Python",
+        "payload": {},
+        "headers": {}
+    },
+    {
+        "method": "GET",
+        "endpoint": "http://localhost:5001/books/v1/search?book_title=' OR 1=1 --",
+        "payload": {},
+        "headers": {}
+    },
+    {
+        "method": "GET",
+        "endpoint": "http://localhost:5001/users/v1/profile/1",
+        "payload": {},
+        "headers": {}
+    },
+    {
+        "method": "GET",
+        "endpoint": "http://localhost:5001/users/v1/profile/2",
+        "payload": {},
+        "headers": {}
+    },
+    {
+        "method": "GET",
+        "endpoint": "http://localhost:5001/admin/users",
+        "payload": {},
+        "headers": {}
+    },
+    {
+        "method": "GET",
+        "endpoint": "http://localhost:5001/api/users/v1",
+        "payload": {},
+        "headers": {}
+    },
+    {
+        "method": "GET",
+        "endpoint": "http://localhost:5001/api/internal/debug",
+        "payload": {},
+        "headers": {}
+    }
+]
+
 
 # ============================================================
 # Load dissector output JSON
@@ -36,10 +346,10 @@ def load_latest_dissector_file(folder="/home/ubuntu/llmjson"):
     files = glob.glob(pattern)
 
     if not files:
-        raise FileNotFoundError(f"❌ No dissector JSON files found in: {folder}")
+        raise FileNotFoundError(f"No dissector JSON files found in: {folder}")
 
     latest_file = max(files, key=os.path.getmtime)
-    print(f"[INFO] Loading dissector output from: {latest_file}")
+    logger.info(f"Loading dissector output from: {latest_file}")
 
     with open(latest_file, "r") as f:
         return json.load(f)
@@ -54,35 +364,44 @@ def main():
     print("[ORCHESTRATOR] Starting API Security Intelligence Framework")
     print("======================================================================")
 
-    # 1️⃣ Initialize components
-    logger.info("Initializing LangChain RAG System with Milvus...")
+    # 1️⃣ Ensure Qdrant is alive
+    logger.info("Checking Qdrant health...")
+    wait_for_qdrant()
+
+    # 2️⃣ Initialize RAG + LLM
+    logger.info("Initializing Qdrant-based RAG System...")
     rag = RAGSystem()
-    logger.info("RAG System initialized successfully")
+    logger.info("RAG System is ready ✔")
 
     logger.info("Initializing Foundation-Sec-8B LLM...")
     llm = FoundationSecLLM()
-    logger.info("LLM initialized successfully")
+    logger.info("LLM initialized ✔")
 
-    # 2️⃣ Load API traffic from dissector
-    print("\n[INFO] Loading API traffic from dissector...")
-    apis = load_latest_dissector_file("/home/ubuntu/llmjson")
-    logger.info(f"Loaded {len(apis)} API records from dissector")
+    # 3️⃣ Try to load dissector output — fallback to static APIs
+    logger.info("Attempting to load dissector output...")
+    try:
+        apis = load_latest_dissector_file("/home/ubuntu/llmjson")
+        logger.info(f"Loaded {len(apis)} API records from dissector.")
+    except Exception:
+        logger.warning("No dissector files found — using STATIC test APIs instead.")
+        apis = STATIC_APIS
 
-    # 3️⃣ Iterate through APIs and run full analysis
+    # 4️⃣ Analyze each API
     for api in apis:
         print("\n--------------------------------------------------------------")
-        print(f"[ANALYZING] {api['method']} {api['endpoint']}")
+        print(f"[ANALYZING] {api.get('method')} {api.get('endpoint')}")
 
-        # 3.1 Run LLM routing
+        # 4.1 LLM routing
         agent_name, trace_id = run_llm_routing(llm, api)
 
-        # 3.2 Run RAG contextual reasoning
+        # 4.2 RAG contextual reasoning
         rag.retrieve(
             agent_name=agent_name,
-            finding={"endpoint": api["endpoint"], "trace_id": trace_id}
+            finding={"endpoint": api.get("endpoint"), "trace_id": trace_id},
+            top_k=5
         )
 
-        # 3.3 Run the specific agent analysis
+        # 4.3 Run agent
         run_agent(agent_name, api, trace_id)
 
     print("\n======================================================================")
@@ -107,22 +426,17 @@ def run_llm_routing(llm, api_payload):
         logger.info(f"Routing API {prompt_info['endpoint']} via LLM...")
         agent_name = llm.route_to_agent(api_payload)
 
-        # Log LLM reasoning with trace_id
+        # Emit LLM routing reasoning
         trace_id = emit_agent_decision(
             trace_id=None,
             endpoint=prompt_info["endpoint"],
             agent=agent_name,
             rule=None,
             status="INFO",
-            extra={
-                "llm_reasoning": {
-                    "routed_agent": agent_name,
-                    "api": prompt_info
-                }
-            }
+            extra={"llm_reasoning": {"routed_agent": agent_name, "api": prompt_info}}
         )
 
-        logger.info(f"[LLM] Routed to {agent_name} (trace_id={trace_id})")
+        logger.info(f"LLM routed to {agent_name} (trace_id={trace_id})")
         return agent_name, trace_id
 
     except Exception as e:
@@ -141,10 +455,11 @@ def run_llm_routing(llm, api_payload):
 
 def get_base_url(endpoint: str) -> str:
     """Extract the base URL from an endpoint."""
+    from urllib.parse import urlparse
     parsed = urlparse(endpoint)
     if parsed.scheme and parsed.netloc:
         return f"{parsed.scheme}://{parsed.netloc}"
-    return "http://localhost:5001"  # fallback default
+    return "http://localhost:5001"
 
 
 def run_agent(agent_name, api_payload, trace_id):
@@ -152,21 +467,21 @@ def run_agent(agent_name, api_payload, trace_id):
     endpoint = api_payload.get("endpoint", "unknown")
     base_url = get_base_url(endpoint)
 
-    try:
-        if agent_name == "InputAgent":
-            InputAgent().analyze(api_payload, trace_id)
-        elif agent_name == "AuthAgent":
-            AuthAgent(base_url).analyze(api_payload, trace_id)
-        elif agent_name == "AccessAgent":
-            AccessAgent(base_url).analyze(api_payload, trace_id)
-        elif agent_name == "RateAgent":
-            RateAgent(base_url).analyze(api_payload, trace_id)
-        elif agent_name == "DocAccuracyAgent":
-            DocAccuracyAgent(base_url).analyze(api_payload, trace_id)
-        else:
-            logger.warning(f"Unknown agent '{agent_name}', skipping analysis.")
+    agents = {
+        "InputAgent": lambda: InputAgent(base_url).analyze(api_payload, trace_id),
+        "AuthAgent": lambda: AuthAgent(base_url).analyze(api_payload, trace_id),
+        "AccessAgent": lambda: AccessAgent(base_url).analyze(api_payload, trace_id),
+        "RateAgent": lambda: RateAgent(base_url).analyze(api_payload, trace_id),
+        "DocAccuracyAgent": lambda: DocAccuracyAgent(base_url).analyze(api_payload, trace_id),
+    }
 
-        logger.info(f"[{agent_name}] Analysis complete for {endpoint} (trace_id={trace_id})")
+    try:
+        if agent_name in agents:
+            agents[agent_name]()
+        else:
+            logger.warning(f"Unknown agent '{agent_name}', skipping.")
+
+        logger.info(f"[{agent_name}] Analysis complete (trace_id={trace_id})")
 
     except Exception as e:
         logger.error(f"[{agent_name}] failed: {e}")

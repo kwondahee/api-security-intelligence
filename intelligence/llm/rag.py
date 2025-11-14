@@ -1,8 +1,7 @@
-# rag/rag.py
 """
 LangChain RAG System
-Implements RAG with LangChain, Milvus, and Foundation-Sec-8B
-Now includes agent source indexing to improve LLM reasoning accuracy.
+Implements RAG with LangChain, Qdrant, and Foundation-Sec-8B
+Now includes agent source indexing + security KB ingestion.
 """
 
 import logging
@@ -11,9 +10,12 @@ import ast
 import pathlib
 from typing import List, Dict, Any, Optional
 
-# Use the new langchain-huggingface package
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_milvus import Milvus
+# Embeddings & vector DB
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import Qdrant
+
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams
 from langchain_core.documents import Document
 
 from llm.cache import RAGCache
@@ -21,219 +23,208 @@ from llm.queries import QueryGenerator
 
 logger = logging.getLogger(__name__)
 
+
 class RAGSystem:
     """
-    LangChain-based RAG system with Milvus vector store.
-
-    Features:
-    - Milvus vector database (IVF_FLAT index)
-    - BGE-Large-en-v1.5 embeddings
-    - Severity-based caching
-    - Query optimization
-    - Agent source embedding for context-aware reasoning
+    LangChain-based RAG system with Qdrant vector store.
     """
 
     def __init__(
         self,
-        milvus_host: str = "localhost",
-        milvus_port: int = 19530,
+        qdrant_host: str = "localhost",
+        qdrant_port: int = 6333,
         collection_name: str = "security_knowledge_base"
     ):
         self.collection_name = collection_name
-        self.milvus_host = milvus_host
-        self.milvus_port = milvus_port
+        self.qdrant_host = qdrant_host
+        self.qdrant_port = qdrant_port
         self.cache = RAGCache()
         self.query_generator = QueryGenerator()
 
-        logger.info("Initializing LangChain RAG System...")
+        logger.info("Initializing LangChain RAG System (Qdrant)...")
 
-        # Initialize embeddings (BGE-Large-en-v1.5)
+        # ---------------------------------------------------------
+        # Embeddings
+        # ---------------------------------------------------------
         self.embeddings = HuggingFaceEmbeddings(
             model_name="BAAI/bge-large-en-v1.5",
             model_kwargs={'device': 'cuda' if self._has_cuda() else 'cpu'},
-            encode_kwargs={'normalize_embeddings': True}
+            encode_kwargs={'normalize_embeddings': True},
         )
 
-        # Initialize Milvus vector store
-        try:
-            self.langchain_milvus = Milvus(
-                embedding_function=self.embeddings,
-                collection_name=collection_name,
-                connection_args={"host": milvus_host, "port": milvus_port},
-                drop_old=False,
-                auto_id=True
-            )
-            logger.info("RAG System initialized successfully")
-        except Exception as e:
-            logger.warning(f"Collection may need to be recreated: {e}")
-            logger.info("Attempting to recreate collection with correct schema...")
-            self.langchain_milvus = Milvus(
-                embedding_function=self.embeddings,
-                collection_name=collection_name,
-                connection_args={"host": milvus_host, "port": milvus_port},
-                drop_old=True,
-                auto_id=True
-            )
-            logger.info("RAG System initialized successfully (collection recreated)")
+        dim = len(self.embeddings.embed_query("test"))
 
-        # Automatically index agent files for reasoning context
+        # ---------------------------------------------------------
+        # Qdrant client
+        # ---------------------------------------------------------
+        self.client = QdrantClient(url=f"http://{qdrant_host}:{qdrant_port}")
+
+        # Ensure collection exists
+        try:
+            self.client.get_collection(collection_name)
+            logger.info(f"[QDRANT] Using existing collection: {collection_name}")
+        except Exception:
+            logger.warning(f"[QDRANT] Creating new collection: {collection_name}")
+            self.client.recreate_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
+            )
+
+        # ---------------------------------------------------------
+        # LangChain wrapper
+        # ---------------------------------------------------------
+        self.vectorstore = Qdrant(
+            client=self.client,
+            collection_name=collection_name,
+            embeddings=self.embeddings,
+        )
+
+        logger.info("RAG System initialized ✔")
+
+        # ---------------------------------------------------------
+        # Index agent source files
+        # ---------------------------------------------------------
         try:
             self.add_agent_sources()
-            logger.info("[RAG] Agent source files successfully indexed for LLM reasoning.")
         except Exception as e:
-            logger.warning(f"[RAG] Failed to index agent files into Milvus: {e}")
+            logger.warning(f"[RAG] Agent indexing failed: {e}")
 
-    # -----------------------------------------------------
-    # UTILITIES
-    # -----------------------------------------------------
+        # ---------------------------------------------------------
+        # Index security knowledge base documents
+        # ---------------------------------------------------------
+        try:
+            self.load_security_docs()
+        except Exception as e:
+            logger.warning(f"[RAG] Security KB indexing failed: {e}")
 
+    # ---------------------------------------------------------
+    # Utilities
+    # ---------------------------------------------------------
     def _has_cuda(self) -> bool:
-        """Check if CUDA is available."""
         try:
             import torch
             return torch.cuda.is_available()
         except Exception:
             return False
 
-    def _deduplicate_results(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Deduplicate results based on source and text content."""
+    def _deduplicate_results(self, documents):
         seen = {}
         for doc in documents:
-            source = doc.get('source', 'Unknown')
-            text_preview = doc.get('text', '')[:100]
-            key = f"{source}:{text_preview}"
-
-            if key not in seen or doc.get('score', 0) > seen[key].get('score', 0):
+            key = f"{doc.get('source','Unknown')}:{doc.get('text','')[:100]}"
+            if key not in seen:
                 seen[key] = doc
         return list(seen.values())
 
-    # -----------------------------------------------------
-    # CORE METHODS
-    # -----------------------------------------------------
+    # ---------------------------------------------------------
+    # Retrieval
+    # ---------------------------------------------------------
+    def retrieve(self, query=None, severity='MEDIUM', agent_name=None, finding=None, top_k=5):
+        start = time.time()
 
-    def retrieve(
-        self,
-        query: Optional[str] = None,
-        severity: str = 'MEDIUM',
-        agent_name: Optional[str] = None,
-        finding: Optional[Dict[str, Any]] = None,
-        top_k: int = 5
-    ) -> List[Dict[str, Any]]:
-        """
-        Retrieve relevant documents using LangChain + Milvus.
-
-        Args:
-            query: Search query or generated reasoning string
-            severity: Finding severity for cache TTL
-            agent_name: Name of requesting agent
-            finding: Full finding dict for contextual search
-            top_k: Number of documents to retrieve
-
-        Returns:
-            List of relevant documents (deduplicated)
-        """
-        start_time = time.time()
-
-        # Generate optimized query if agent + finding context given
         if agent_name and finding:
             query = self.query_generator.generate(agent_name, finding)
-            logger.info(f"Generated query for {agent_name}: {query[:100]}...")
 
         if not query:
-            logger.warning("No query provided to RAG retrieval.")
+            logger.warning("No query passed to RAG.retrieve()")
             return []
 
-        # Check RAG cache first
         cached = self.cache.get(query, severity)
-        if cached is not None:
-            latency = (time.time() - start_time) * 1000
-            logger.info(f"[RAG-CACHE] HIT - {len(cached)} docs (latency: {latency:.1f}ms)")
+        if cached:
+            logger.info(f"[RAG] Cache hit")
             return cached
 
         try:
-            fetch_k = top_k * 2
-            results_with_scores = self.langchain_milvus.similarity_search_with_score(query=query, k=fetch_k)
+            results = self.vectorstore.similarity_search_with_score(query, k=top_k * 2)
 
-            documents = [
+            docs = [
                 {
-                    'text': doc.page_content,
-                    'source': doc.metadata.get('source', 'Unknown'),
-                    'metadata': doc.metadata,
-                    'score': float(score)
+                    "text": doc.page_content,
+                    "metadata": doc.metadata,
+                    "source": doc.metadata.get("source", "Unknown"),
+                    "score": float(score)
                 }
-                for doc, score in results_with_scores
+                for doc, score in results
             ]
 
-            documents = self._deduplicate_results(documents)
-            documents = documents[:top_k]
-            self.cache.set(query, documents, severity)
+            docs = self._deduplicate_results(docs)[:top_k]
 
-            latency = (time.time() - start_time) * 1000
-            phase = agent_name or "LLM"
-            count = len(documents)
-            logger.info(f"[RAG-REASONING] {phase} retrieved {count} relevant document{'s' if count != 1 else ''} in {latency:.1f}ms")
-            #logger.info(f"[RAG-REASONING] {agent_name or 'None'} retrieved {len(documents)} docs in {latency:.1f}ms")
-            return documents
+            self.cache.set(query, docs, severity)
+
+            logger.info(f"[RAG] Retrieved {len(docs)} docs in {(time.time()-start)*1000:.1f}ms")
+            return docs
 
         except Exception as e:
             logger.error(f"[RAG] Retrieval failed: {e}")
             return []
 
-    def add_documents(self, documents: List[Dict[str, Any]], skip_cache_invalidation: bool = False):
-        """Add documents to vector store."""
+    # ---------------------------------------------------------
+    # Add documents
+    # ---------------------------------------------------------
+    def add_documents(self, documents, skip_cache_invalidation=False):
         langchain_docs = [
-            Document(
-                page_content=doc['text'],
-                metadata={'source': doc.get('source', 'unknown'), **doc.get('metadata', {})}
-            )
+            Document(page_content=doc["text"], metadata=doc.get("metadata", {}))
             for doc in documents
         ]
-
         try:
-            self.langchain_milvus.add_documents(langchain_docs)
+            self.vectorstore.add_documents(langchain_docs)
             if not skip_cache_invalidation:
                 self.cache.on_kb_update()
-            logger.info(f"[RAG] Added {len(documents)} documents to vector store.")
         except Exception as e:
-            logger.error(f"[RAG] Failed to add documents: {e}")
+            logger.error(f"[RAG] Failed to add docs: {e}")
 
-    def get_cache_stats(self) -> Dict[str, Any]:
-        """Get cache statistics."""
-        return self.cache.get_stats()
+    # ---------------------------------------------------------
+    # Security KB ingestion
+    # ---------------------------------------------------------
+    def load_security_docs(self, kb_dir=None):
+        if kb_dir is None:
+            kb_dir = pathlib.Path(__file__).resolve().parent / "security_kb"
 
-    # -----------------------------------------------------
-    # AGENT SOURCE INDEXING
-    # -----------------------------------------------------
+        documents = []
 
-    def add_agent_sources(self, agents_dir: str = None):
-        """
-        Index all agent .py files into Milvus so the LLM can reason about their capabilities.
-        Each file’s docstring or top 800 chars are embedded into the KB.
-        """
+        for ext in ("*.md", "*.txt"):
+            for file in pathlib.Path(kb_dir).glob(ext):
+                try:
+                    text = file.read_text()
+                    documents.append({
+                        "text": text,
+                        "source": f"kb::{file.name}",
+                        "metadata": {"file": str(file)}
+                    })
+                except Exception as e:
+                    logger.warning(f"[RAG] Could not read {file.name}: {e}")
+
+        if documents:
+            self.add_documents(documents)
+            logger.info(f"[RAG] Indexed {len(documents)} security KB documents.")
+        else:
+            logger.warning("[RAG] No security KB documents found.")
+
+    # ---------------------------------------------------------
+    # Agent source indexing
+    # ---------------------------------------------------------
+    def add_agent_sources(self, agents_dir=None):
         if agents_dir is None:
             agents_dir = str(pathlib.Path(__file__).resolve().parent.parent / "agents")
 
         documents = []
         for path in pathlib.Path(agents_dir).glob("*.py"):
             try:
-                src = path.read_text(encoding="utf-8")
+                src = path.read_text()
                 tree = ast.parse(src)
                 doc = ast.get_docstring(tree)
                 name = path.stem.replace("_agent", "").capitalize() + "Agent"
 
                 content = f"{name} source summary:\n{doc or src[:800]}"
+
                 documents.append({
                     "text": content,
                     "source": f"agent::{name}",
-                    "metadata": {"file": str(path)}
+                    "metadata": {"file": str(path)},
                 })
-                logger.debug(f"[RAG] Prepared agent document for {name}")
 
             except Exception as e:
-                logger.warning(f"[RAG] Failed to parse {path.name}: {e}")
+                logger.warning(f"[RAG] Could not parse {path.name}: {e}")
 
         if documents:
             self.add_documents(documents, skip_cache_invalidation=True)
-            logger.info(f"[RAG] Indexed {len(documents)} agent files into Milvus for LLM reasoning.")
-        else:
-            logger.warning("[RAG] No agent files found to index.")
+            logger.info(f"[RAG] Indexed {len(documents)} agent files.")
