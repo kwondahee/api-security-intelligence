@@ -5,8 +5,8 @@ Requires=milvus.service
 
 [Service]
 Type=simple
-WorkingDirectory=/home/ubuntu/intelligence
-ExecStart=/home/ubuntu/intelligence/run_intelligence.sh
+WorkingDirectory=/home/ubuntu/api-security-intelligence/intelligence
+ExecStart=/home/ubuntu/api-security-intelligence/intelligence/run_intelligence.sh
 Restart=on-failure
 User=ubuntu
 Environment=PYTHONUNBUFFERED=1
