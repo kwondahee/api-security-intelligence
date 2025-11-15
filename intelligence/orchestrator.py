@@ -60,41 +60,62 @@ def wait_for_qdrant(url="http://localhost:6333/healthz", retries=30, delay=2):
 # ============================================================
 
 STATIC_APIS = [
-    # --- DocAccuracyAgent ---
+    # ===================== DocAccuracyAgent (6) =====================
     {"method": "GET", "endpoint": "http://localhost:5001/openapi.json", "payload": {}, "headers": {}},
     {"method": "GET", "endpoint": "http://localhost:5001/api/users/v1", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/docs/missing", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/spec/v2/openapi.yaml", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/products/v2", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/unknown/route", "payload": {}, "headers": {}},
 
-    # --- InputAgent ---
+    # ===================== InputAgent (6) =====================
     {"method": "GET", "endpoint": "http://localhost:5001/books/v1/search?book_title=Python", "payload": {}, "headers": {}},
     {"method": "GET", "endpoint": "http://localhost:5001/books/v1/search?book_title=' OR 1=1 --", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/books/v1/search?book_title=<script>alert(1)</script>", "payload": {}, "headers": {}},
     {"method": "POST", "endpoint": "http://localhost:5001/payments/v1/charge",
-        "payload": {"card_number": "4111111111111111", "cvv": "123", "amount": 99.99},
+        "payload": {"card_number": "4111111111111111", "cvv": "123", "amount": 50},
         "headers": {"Content-Type": "application/json"}},
-    {"method": "GET", "endpoint": "http://localhost:5001/search/v1/ssrf?url=http://localhost:5001/", "payload": {}, "headers": {}},
     {"method": "GET", "endpoint": "http://localhost:5001/files/v1/download?path=logs/app.log", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/search/v1/ssrf?url=http://127.0.0.1:5001/", "payload": {}, "headers": {}},
 
-    # --- AuthAgent ---
+    # ===================== AuthAgent (6) =====================
     {"method": "POST", "endpoint": "http://localhost:5001/api/v1/login",
-        "payload": {"username": "admin", "password": "password123"},
+        "payload": {"username": "admin", "password": "password"},
         "headers": {"Content-Type": "application/json"}},
-    {"method": "POST", "endpoint": "http://localhost:5001/api/v1/login",
-        "payload": {"username": "nonexistent", "password": "wrong"},
+    {"method": "POST", "endpoint": "http://localhost:5001/api/v1/login?badcreds=true",
+        "payload": {"username": "ghost", "password": "wrong"},
         "headers": {"Content-Type": "application/json"}},
-    {"method": "GET", "endpoint": "http://localhost:5001/admin/users", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/auth/validate", "payload": {}, "headers": {"Authorization": "Bearer INVALID"}},
+    {"method": "GET", "endpoint": "http://localhost:5001/auth/validate?missingjwt=true", "payload": {}, "headers": {"Authorization": ""}},
+    {"method": "GET", "endpoint": "http://localhost:5001/auth/refresh", "payload": {}, "headers": {"Authorization": "Bearer expired.jwt.token"}},
+    {"method": "POST", "endpoint": "http://localhost:5001/api/v1/register",
+        "payload": {"username": "newuser", "password": ""},
+        "headers": {"Content-Type": "application/json"}},
 
-    # --- AccessAgent ---
+    # ===================== AccessAgent (6) =====================
     {"method": "GET", "endpoint": "http://localhost:5001/users/v1/profile/1", "payload": {}, "headers": {}},
     {"method": "GET", "endpoint": "http://localhost:5001/users/v1/profile/2", "payload": {}, "headers": {}},
-    {"method": "GET", "endpoint": "http://localhost:5001/inventory/v1/item/1", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/admin/users", "payload": {}, "headers": {}},
     {"method": "GET", "endpoint": "http://localhost:5001/inventory/v1/item/2", "payload": {}, "headers": {}},
-    {"method": "GET", "endpoint": "http://localhost:5001/inventory/v1/item/999", "payload": {}, "headers": {}},
     {"method": "GET", "endpoint": "http://localhost:5001/files/v1/download?path=../../etc/passwd", "payload": {}, "headers": {}},
-    {"method": "GET", "endpoint": "http://localhost:5001/admin/config", "payload": {}, "headers": {}},
     {"method": "GET", "endpoint": "http://localhost:5001/debug/env", "payload": {}, "headers": {}},
 
-    # --- RateAgent ---
-    {"method": "GET", "endpoint": "http://localhost:5001/rate/v1/test", "payload": {}, "headers": {}}
+    # ===================== RateAgent (6) =====================
+    {"method": "GET", "endpoint": "http://localhost:5001/rate/v1/test", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/rate/v1/login", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/rate/v1/checkout", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/rate/v1/queue", "payload": {}, "headers": {}},
+    {"method": "POST", "endpoint": "http://localhost:5001/rate/v1/order", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/rate/v1/report", "payload": {}, "headers": {}},
+
+    # ===================== AccessAgent (Option C new endpoints) =====================
+    {"method": "GET", "endpoint": "http://localhost:5001/api/v2/config/secure", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/api/v2/admin/roles", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/api/v2/logs/recent", "payload": {}, "headers": {}},
+    {"method": "GET", "endpoint": "http://localhost:5001/api/v2/internal/metrics", "payload": {}, "headers": {}}
+
 ]
+
 
 
 

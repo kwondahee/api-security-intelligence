@@ -149,16 +149,102 @@ class FoundationSecLLM:
             )
             return "InputAgent"  # Fallback
 
-    def _build_routing_prompt(self, api_payload: Dict[str, Any], context_text: str) -> str:
-        """Build the RAG-informed prompt for agent routing."""
-        method = api_payload.get('method', 'GET')
-        endpoint = api_payload.get('endpoint', '/')
-        payload = api_payload.get('payload', {})
-        headers = api_payload.get('headers', {})
+def _build_routing_prompt(self, api_payload: Dict[str, Any], context_text: str) -> str:
+    """
+    Build the RAG-informed prompt for agent routing.
+    Rules are priority-based but expressed as PATTERN categories,
+    not hard-coded paths — so the model generalizes to any API shape.
+    """
 
-        prompt = f"""You are a cybersecurity routing model with domain-specific knowledge.
+    method = api_payload.get('method', 'GET')
+    endpoint = api_payload.get('endpoint', '/')
+    payload = api_payload.get('payload', {})
+    headers = api_payload.get('headers', {})
 
-Below are API request details and relevant security knowledge retrieved from the RAG system.
+    agent_descriptions = """
+Available Agents:
+- InputAgent: Detects unsafe or malicious user input (SQLi, XSS, SSRF, injection payloads, suspicious parameters).
+- AuthAgent: Handles authentication flows (login, auth, token, register, refresh, validation).
+- AccessAgent: Handles authorization issues (BOLA, IDOR, privilege escalation, accessing protected resources).
+- RateAgent: Handles rate limiting, throttling, DoS-abuse or burst requests.
+- DocAccuracyAgent: Ensures documentation consistency (OpenAPI, Swagger, documentation/schema endpoints, missing routes).
+"""
+
+    strict_rules = """
+=== PRIORITY DECISION RULES (Generalized Pattern-Based) ===
+
+1) DocAccuracyAgent  (HIGHEST PRIORITY)
+Choose DocAccuracyAgent when:
+- The route suggests documentation: keywords like "openapi", "swagger", "schema", "docs", "spec".
+- The route appears undefined, unfamiliar, or resembles a missing/incorrect API.
+- The request appears meant to check API accuracy.
+
+2) AuthAgent
+Choose AuthAgent when the request involves:
+- Authentication, identity, sessions, tokens, login, registration.
+- Keywords: "auth", "login", "token", "register", "refresh", "validate".
+
+3) InputAgent
+Choose InputAgent when:
+- The input itself is dangerous:
+    • SQLi patterns:  ' OR, --, 1=1
+    • XSS patterns:   <script>
+    • SSRF patterns:  url=http:// or url=https://
+    • Suspicious or malformed query/body parameters
+
+4) RateAgent
+Choose RateAgent when:
+- The route involves rate limiting or request-abuse testing:
+    • keywords: "rate", "throttle", "ratelimit", "dos", "stress".
+
+5) AccessAgent (LOWEST PRIORITY)
+Choose AccessAgent when none of the above match, and:
+- The route references a resource by ID (users/{id}, item/{id}, etc.)
+- The route refers to privileged/sensitive areas:
+    • admin, config, debug, env, internal, metrics, logs
+- The request attempts file access or traversal:
+    • ../  ../../  system file paths
+"""
+
+    few_shot_examples = """
+=== CLASSIFICATION EXAMPLES ===
+
+Example 1
+Request: GET /openapi.json
+Reasoning: Documentation reference → DocAccuracyAgent
+Answer: DocAccuracyAgent
+
+Example 2
+Request: GET /search?title=' OR 1=1 --
+Reasoning: SQL injection → InputAgent
+Answer: InputAgent
+
+Example 3
+Request: GET /search?query=<script>alert(1)</script>
+Reasoning: XSS payload → InputAgent
+Answer: InputAgent
+
+Example 4
+Request: POST /api/v1/login
+Reasoning: Authentication flow → AuthAgent
+Answer: AuthAgent
+
+Example 5
+Request: GET /users/v1/profile/2
+Reasoning: Accessing another user’s record → AccessAgent
+Answer: AccessAgent
+
+Example 6
+Request: GET /rate/v1/test
+Reasoning: Rate limit test → RateAgent
+Answer: RateAgent
+"""
+
+    prompt = f"""
+You are a cybersecurity LLM router. Classify the API request into exactly ONE agent.
+
+=== Retrieved Security Knowledge (RAG Context) ===
+{context_text}
 
 === API Request ===
 Method: {method}
@@ -166,22 +252,25 @@ Endpoint: {endpoint}
 Payload: {payload}
 Headers: {headers}
 
-=== Retrieved Security Knowledge (RAG Context) ===
-{context_text}
+=== Agent Definitions ===
+{agent_descriptions}
 
-Available Agents:
-- InputAgent: Handles input validation (SQL injection, XSS, path traversal)
-- AuthAgent: Handles authentication issues (missing auth, JWT vulnerabilities, weak credentials)
-- AccessAgent: Handles authorization issues (BOLA, BFLA, privilege escalation)
-- RateAgent: Handles rate limiting and DoS vulnerabilities
-- DocAccuracyAgent: Handles API documentation accuracy
+{strict_rules}
 
-Analyze the API request in light of the retrieved security knowledge and determine which agent should analyze it.
+{few_shot_examples}
 
-The final line of your response must contain ONLY the agent name.
+=== INSTRUCTIONS ===
+1. Apply rules IN PRIORITY ORDER (Doc → Auth → Input → Rate → Access).
+2. Use pattern-based reasoning, not exact string matching.
+3. Provide a short reasoning paragraph.
+4. On the LAST LINE print ONLY one of:
+   InputAgent, AuthAgent, AccessAgent, RateAgent, DocAccuracyAgent
 
-Agent:"""
-        return prompt
+Agent:
+"""
+
+    return prompt
+
 
     def _extract_agent_name(self, response: str) -> str:
         """Extract agent name from LLM response."""

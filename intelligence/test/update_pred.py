@@ -1,9 +1,45 @@
 import json
 import os
+from urllib.parse import urlparse
+from datetime import datetime
 
-LOG_FILE = "intelligence/log/agents.jsonl"
-GROUND_TRUTH_FILE = "ground_truth.json"
-OUTPUT_FILE = "orchestrator_eval_results.json"
+GROUND_TRUTH_FILE = "test/ground_truth.json"
+EVAL_FOLDER = "test/evaluation"
+
+
+def get_latest_log():
+    """Pick the newest agents_XXX.jsonl file automatically."""
+    if not os.path.exists("log"):
+        return None
+
+    logs = [f for f in os.listdir("log") if f.startswith("agents_") and f.endswith(".jsonl")]
+    if not logs:
+        return None
+
+    logs_sorted = sorted(logs)
+    return os.path.join("log", logs_sorted[-1])
+
+
+def get_next_eval_filename():
+    """Increment eval file numbers."""
+    os.makedirs(EVAL_FOLDER, exist_ok=True)
+
+    existing = [
+        f for f in os.listdir(EVAL_FOLDER)
+        if f.startswith("eval_") and f.endswith(".json")
+    ]
+
+    if not existing:
+        next_num = 1
+    else:
+        nums = []
+        for f in existing:
+            num = f.replace("eval_", "").replace(".json", "")
+            if num.isdigit():
+                nums.append(int(num))
+        next_num = max(nums) + 1 if nums else 1
+
+    return os.path.join(EVAL_FOLDER, f"eval_{next_num:03d}.json")
 
 
 def load_ground_truth():
@@ -11,78 +47,57 @@ def load_ground_truth():
         return json.load(f)
 
 
-def load_agent_logs():
-    """
-    Expected format of each line in agents.jsonl:
-    {
-        "endpoint": "...",
-        "agent": "AuthAgent",
-        "trace_id": "...",
-        "extra": {...}
-    }
-    """
+def load_agent_logs(log_path):
     logs = []
-    if not os.path.exists(LOG_FILE):
-        print(f"[ERROR] Log file not found: {LOG_FILE}")
+    if not log_path or not os.path.exists(log_path):
+        print(f"[ERROR] Log file not found: {log_path}")
         return logs
 
-    with open(LOG_FILE, "r") as f:
+    with open(log_path, "r") as f:
         for line in f:
-            try:
-                logs.append(json.loads(line))
-            except Exception:
-                pass  # ignore malformed lines
+            try: logs.append(json.loads(line))
+            except: pass
 
     return logs
 
 
-def normalize_endpoint(url: str):
-    """Removes query order issues or trailing slashes."""
-    return url.rstrip("/").lower()
+def normalize_path(url: str):
+    parsed = urlparse(url)
+    return parsed.path.rstrip("/").lower()
 
 
 def update_predictions():
     print("=======================================================")
-    print("   🔍 Updating Predictions using Orchestrator Logs")
+    print("   🔍 Updating Predictions using Latest LOG")
     print("=======================================================\n")
 
+    log_file = get_latest_log()
+    print(f"[INFO] Using log file: {log_file}")
+
     gt = load_ground_truth()
-    logs = load_agent_logs()
+    logs = load_agent_logs(log_file)
 
-    if not logs:
-        print("[WARNING] No logs found. Nothing to update.")
-        return
-
-    # Create lookup: endpoint -> last prediction
     predictions = {}
-
     for entry in logs:
-        endpoint = entry.get("endpoint")
+        ep = entry.get("endpoint")
         agent = entry.get("agent")
-
-        if not endpoint or not agent:
+        if not ep or not agent:
             continue
-
-        endpoint_norm = normalize_endpoint(endpoint)
-        predictions[endpoint_norm] = agent
+        predictions[normalize_path(ep)] = agent
 
     updated = 0
-
-    # Fill preds into ground truth
     for item in gt:
-        ep = normalize_endpoint(item["endpoint"])
-
-        if ep in predictions:
-            item["pred"] = predictions[ep]
+        gt_path = normalize_path(item["endpoint"])
+        item["pred"] = predictions.get(gt_path, "UNKNOWN")
+        if gt_path in predictions:
             updated += 1
 
-    # Save new file
-    with open(OUTPUT_FILE, "w") as f:
+    eval_output = get_next_eval_filename()
+    with open(eval_output, "w") as f:
         json.dump(gt, f, indent=4)
 
-    print(f"[OK] Updated {updated} predictions.")
-    print(f"[OK] Saved results to {OUTPUT_FILE}")
-    print(f"[OK] Now run: python3 evaluate.py --file {OUTPUT_FILE}")
+    print(f"[OK] Updated {updated} predictions")
+    print(f"[OK] Saved -> {eval_output}")
 
 
 if __name__ == "__main__":
