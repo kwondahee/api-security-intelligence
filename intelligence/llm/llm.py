@@ -129,7 +129,7 @@ class FoundationSecLLM:
                 status="REASONED",
                 extra={
                     "chosen_agent": agent_name,
-                    "reasoning": response.strip()[:2000],
+                    "reasoning": response.strip()[:6000],
                     "rag_sources": rag_sources,
                     "latency_sec": round(latency, 2)
                 }
@@ -150,29 +150,36 @@ class FoundationSecLLM:
             return "InputAgent"  # Fallback
 
     def _build_routing_prompt(self, api_payload: Dict[str, Any], context_text: str) -> str:
-            """
-            Just provides the API request and asks for the agent name.
-            """
-            method = api_payload.get('method', 'GET')
-            endpoint = api_payload.get('endpoint', '/')
-            payload = api_payload.get('payload', {})
-            headers = api_payload.get('headers', {})
+                """
+                Build prompt for agent routing, requiring both reasoning and a specific output format.
+                """
+                method = api_payload.get('method', 'GET')
+                endpoint = api_payload.get('endpoint', '/')
+                payload = api_payload.get('payload', {})
+                headers = api_payload.get('headers', {})
 
-            prompt = f"""Classify this API request into one agent:
-    - InputAgent: SQLi, XSS, SSRF, injection payloads
-    - AuthAgent: login, auth, token, register, validate
-    - AccessAgent: admin, config, profile, resource access
-    - RateAgent: rate limiting, throttling
-    - DocAccuracyAgent: openapi, swagger, docs, spec
+                prompt = f"""You are an API Security Analyst. Your task is to classify the provided API request into the most relevant security agent.
 
+    **Available Agents:**
+    - InputAgent: Focuses on input validation and injection attacks (SQLi, XSS, SSRF, Path Traversal, Command Injection).
+    - AuthAgent: Focuses on authentication issues (login, registration, session token validation, expired/missing tokens).
+    - AccessAgent: Focuses on authorization/access control issues (BOLA, BFLA, accessing admin endpoints, sensitive resources).
+    - RateAgent: Focuses on rate limiting, throttling, and brute-force protection.
+    - DocAccuracyAgent: Focuses on API discovery, compliance with OpenAPI specs, and exposed documentation endpoints.
 
-    Request: {method} {endpoint}
+    **API Request to Classify:**
+    Method: {method}
+    Endpoint: {endpoint}
     Payload: {payload}
     Headers: {headers}
 
-    Agent:"""
+    **Instructions:**
+    1. **Provide a detailed Reason:** Explain which agent best applies to this request based on the method, endpoint, and payload content. For example, if the request contains `OR 1=1`, explain that this is a SQL Injection attempt, making the **InputAgent** the most suitable choice.
+    2. **Output the final classification on the last line, prefixed by 'FINAL\_AGENT: '**. Use only one of the Agent names listed above.
 
-            return prompt
+    **Reasoning:**
+    """
+                return prompt
 
 
     def _extract_agent_name(self, response: str) -> str:
