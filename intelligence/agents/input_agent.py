@@ -7,7 +7,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from dataclasses import dataclass, asdict
 from typing import Dict, Any, List, Optional
-from urllib.parse import urljoin, urlencode
+from urllib.parse import urljoin, urlencode, urlparse, parse_qs
 from html import unescape
 import logging
 from telemetry.logger import emit_agent_decision
@@ -61,47 +61,71 @@ class InputAgent:
     def analyze(self, api_payload: Dict[str, Any], trace_id: Optional[str] = None):
         """
         Unified entrypoint for orchestrator.
-        Runs input validation tests and reports findings.
+        - Parses endpoint (path + query)
+        - Infers parameter name from query/body
+        - Runs active input validation tests
         """
-        endpoint = api_payload.get("endpoint", "/")
-        method = api_payload.get("method", "GET")
-        payload = api_payload.get("payload", {})
+        raw_endpoint = api_payload.get("endpoint", "/")
+        method = (api_payload.get("method") or "GET").upper()
+        body_payload = api_payload.get("payload") or {}
 
-        # Try to infer which parameter to test
-        parameter = next(iter(payload.keys()), "q")
+        # 1) Parse the endpoint into path + query string
+        parsed = urlparse(raw_endpoint)
+        # e.g. "/search?q=%27%20OR%201%3D1%20--"
+        #  -> path="/search", query="q=%27%20OR%201%3D1%20--"
+        qs = parse_qs(parsed.query)  # {"q": ["' OR 1=1 --"]}
 
-        logger.info(f"[InputAgent] Starting analysis for {endpoint} (trace_id={trace_id})")
+        # Flatten query string into simple dict {"q": "<value>"}
+        query_params = {k: v[0] for k, v in qs.items()} if qs else {}
+
+        # 2) Merge query params + body payload (body wins on key conflicts)
+        merged_payload: Dict[str, Any] = {**query_params, **(body_payload or {})}
+
+        # 3) Choose a parameter to fuzz – fall back to "q" if nothing
+        parameter = next(iter(merged_payload.keys()), "q")
+
+        # Clean endpoint path (no query)
+        clean_endpoint = parsed.path or raw_endpoint
+
+        logger.info(
+            f"[InputAgent] Starting analysis for {raw_endpoint} "
+            f"(clean_endpoint={clean_endpoint}, parameter={parameter}, trace_id={trace_id})"
+        )
 
         try:
-            findings = self.run_scan(endpoint_path=endpoint, parameter=parameter, method=method)
+            findings = self.run_scan(
+                endpoint_path=clean_endpoint,
+                parameter=parameter,
+                method=method,
+            )
 
             if not findings:
                 emit_agent_decision(
                     trace_id=trace_id,
-                    endpoint=endpoint,
+                    endpoint=clean_endpoint,
                     agent=self.name,
                     rule="InputValidationCheck",
                     status="SECURE",
                     extra={"message": "No input validation issues detected"}
                 )
-                logger.info(f"[InputAgent] No vulnerabilities detected for {endpoint}")
+                logger.info(f"[InputAgent] No vulnerabilities detected for {clean_endpoint}")
             else:
                 for finding in findings:
                     emit_agent_decision(
                         trace_id=trace_id,
-                        endpoint=finding.get("endpoint", endpoint),
+                        endpoint=finding.get("endpoint", clean_endpoint),
                         agent=self.name,
                         rule=finding.get("vuln", "InputVuln"),
                         status=finding.get("status", "VULNERABLE"),
                         extra=finding
                     )
-                logger.info(f"[InputAgent] Reported {len(findings)} findings for {endpoint}")
+                logger.info(f"[InputAgent] Reported {len(findings)} findings for {clean_endpoint}")
 
         except Exception as e:
-            logger.error(f"[InputAgent] Analysis failed for {endpoint}: {e}")
+            logger.error(f"[InputAgent] Analysis failed for {raw_endpoint}: {e}")
             emit_agent_decision(
                 trace_id=trace_id,
-                endpoint=endpoint,
+                endpoint=clean_endpoint,
                 agent=self.name,
                 rule="InputValidationError",
                 status="ERROR",
