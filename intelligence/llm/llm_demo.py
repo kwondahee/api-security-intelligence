@@ -142,7 +142,7 @@ class FoundationSecLLM:
             with torch.no_grad():
                 outputs = self.model.generate(
                     **inputs,
-                    max_new_tokens=100,
+                    max_new_tokens=80,
                     temperature=0.1,
                     do_sample=False,
                     pad_token_id=self.tokenizer.pad_token_id,
@@ -187,37 +187,27 @@ class FoundationSecLLM:
             return self._fallback_routing(api_payload)
 
     def _build_routing_prompt(self, api_payload: Dict[str, Any], context_text: str) -> str:
-        """
-        Build the RAG-informed prompt for agent routing with priority rules.
-        Simplified version for smaller models.
-        """
+        """Build concise routing prompt optimized for small models."""
         method = api_payload.get('method', 'GET')
         endpoint = api_payload.get('endpoint', '/')
-        payload = str(api_payload.get('payload', {}))[:150]  # Truncate for small models
+        payload = str(api_payload.get('payload', {}))[:200]  # Truncate
         
-        # Condensed prompt optimized for small models
-        prompt = f"""API Security Classification:
+        # Simplified prompt for smaller models
+        prompt = f"""API Security Routing Task:
 
 Request: {method} {endpoint}
-Data: {payload}
+Payload: {payload}
 
-Context: {context_text[:300]}
+Context: {context_text[:400]}
 
-PRIORITY RULES (apply in order):
-1. DocAccuracyAgent: openapi, swagger, docs, spec, missing routes
-2. AuthAgent: login, auth, token, register, validation
-3. InputAgent: SQLi (' OR, --), XSS (<script>), SSRF (url=http), injection
-4. RateAgent: rate, throttle, dos, limit
-5. AccessAgent: resource IDs, admin, config, debug, file paths (../)
+Agents:
+- InputAgent: SQL injection, XSS, path traversal
+- AuthAgent: Missing auth, JWT, weak credentials
+- AccessAgent: BOLA, BFLA, authorization
+- RateAgent: Rate limiting, DoS
+- DocAccuracyAgent: API documentation
 
-EXAMPLES:
-- GET /openapi.json → DocAccuracyAgent
-- GET /search?q=' OR 1=1 -- → InputAgent
-- POST /api/v1/login → AuthAgent
-- GET /users/profile/2 → AccessAgent
-- GET /rate/test → RateAgent
-
-Answer with ONE agent name:"""
+Which agent? Answer with ONE agent name only:"""
         
         return prompt
 
@@ -246,36 +236,23 @@ Answer with ONE agent name:"""
         return self._fallback_routing({"endpoint": response})
 
     def _fallback_routing(self, api_payload: Dict[str, Any]) -> str:
-        """
-        Priority-based rule fallback matching the LLM prompt structure.
-        """
+        """Simple rule-based fallback when LLM fails."""
         endpoint = api_payload.get("endpoint", "").lower()
         method = api_payload.get("method", "").upper()
-        payload = str(api_payload.get("payload", {})).lower()
         
-        # Priority 1: DocAccuracyAgent
-        if any(kw in endpoint for kw in ["openapi", "swagger", "docs", "spec", ".json", ".yaml"]):
-            return "DocAccuracyAgent"
-        
-        # Priority 2: AuthAgent
-        if any(kw in endpoint for kw in ["auth", "login", "token", "register", "validate"]):
+        # Rule-based routing
+        if "login" in endpoint or "auth" in endpoint or method == "POST":
             return "AuthAgent"
-        
-        # Priority 3: InputAgent (dangerous input)
-        dangerous_patterns = ["' or", "--", "1=1", "<script>", "url=http", "../"]
-        if any(pattern in endpoint or pattern in payload for pattern in dangerous_patterns):
-            return "InputAgent"
-        
-        # Priority 4: RateAgent
-        if any(kw in endpoint for kw in ["rate", "throttle", "limit", "dos"]):
-            return "RateAgent"
-        
-        # Priority 5: AccessAgent (default for resources)
-        if any(kw in endpoint for kw in ["admin", "config", "debug", "env", "internal", "profile", "inventory"]):
+        elif "admin" in endpoint or "privilege" in endpoint:
             return "AccessAgent"
-        
-        # Final fallback
-        return "InputAgent"
+        elif "rate" in endpoint or "limit" in endpoint:
+            return "RateAgent"
+        elif "search" in endpoint or any(char in endpoint for char in ["'", "--", "../"]):
+            return "InputAgent"
+        elif "openapi" in endpoint or "swagger" in endpoint:
+            return "DocAccuracyAgent"
+        else:
+            return "InputAgent"
 
 
 # ============================================================
@@ -295,38 +272,28 @@ def demo():
     test_cases = [
         {
             "method": "GET",
-            "endpoint": "http://localhost:5001/openapi.json",
-            "payload": {},
-            "description": "OpenAPI spec"
-        },
-        {
-            "method": "GET",
             "endpoint": "http://localhost:5001/books/v1/search?book_title=' OR 1=1 --",
-            "payload": {},
-            "description": "SQL injection"
+            "payload": {}
         },
         {
             "method": "POST",
             "endpoint": "http://localhost:5001/api/v1/login",
-            "payload": {"username": "admin", "password": "password123"},
-            "description": "Login"
+            "payload": {"username": "admin", "password": "password123"}
         },
         {
             "method": "GET",
             "endpoint": "http://localhost:5001/admin/users",
-            "payload": {},
-            "description": "Admin access"
+            "payload": {}
         },
         {
             "method": "GET",
             "endpoint": "http://localhost:5001/rate/v1/test",
-            "payload": {},
-            "description": "Rate limiting"
+            "payload": {}
         }
     ]
     
     for i, test in enumerate(test_cases, 1):
-        print(f"\n--- Test Case {i}: {test['description']} ---")
+        print(f"\n--- Test Case {i} ---")
         print(f"Method: {test['method']}")
         print(f"Endpoint: {test['endpoint']}")
         
